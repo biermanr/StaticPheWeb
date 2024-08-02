@@ -5,14 +5,14 @@ import jinja2  # NOTE, move this to a different file
 
 
 @click.group()
-def cli():
+def cli() -> None:
     """CLI group to add subcommands for spheweb."""
     pass
 
 
 @cli.command()
 @click.argument("input_fname", type=click.Path(exists=True))
-def parse(input_fname):
+def parse(input_fname: click.Path) -> None:
     """Parse inputs to generate a static pheweb visualization."""
     click.echo(click.format_filename(input_fname))
 
