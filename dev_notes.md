@@ -15,3 +15,23 @@ its automated.
 
 Oh, apparently there is a `.tojson()` jinja function that I can use to
 convert the data to json, so I'll try that.
+
+Aug 7th 2024: Adding HTML files as package-data
+---
+With help from Vineet, I was able to add the HTML files as package data.
+I did this by creating a templates subdir of src/ and using the following
+lines in the pyproject.toml file:
+```toml
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+templates = ["*.html"]
+static = ["*.js"]
+```
+
+which worked and could be accessed with the following code:
+```python
+import importlib.resources
+p = importlib.resources.files("templates", "template.html")
+```
