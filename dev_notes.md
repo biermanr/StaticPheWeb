@@ -77,3 +77,36 @@ p = importlib.resources.files("spheweb.templates") / "template.html"
 
 I can't figure out why this works locally but not on GHA. I think I'm just going
 to drop python 3.9 from GHAs testing matrix. This seems so strange.
+Well, at least GHA passes now.
+
+Tomorrow I'll try to get some simple templating working with Jinja.
+Also trying to get mypy working, currently running into errors with decorators
+and "Cannot find implementation or library stub for module named 'click'".
+Trying to run with `nox`.
+
+Aug 8th 2024: Jinja Templating
+---
+Started by adding mypy to .pre-commit-config.yaml, excluding the
+`cli.py` and `noxfile.py` files, which are complicated with external packages/decorators.
+
+I'm trying to get Jinja templating working with the spheweb package.
+I got this to work without too many issues.
+I decided to use a jinja `FileSystemLoader` to load the templates from the package data
+using `importlib.resources` and then render the template with the data.
+```python
+from jinja2 import Environment, FileSystemLoader
+import importlib.resources
+
+template_path = importlib.resources.files("spheweb").joinpath("templates")
+
+env = Environment(loader=FileSystemLoader(template_path))
+template = env.get_template("template.html")
+rendered = template.render(data)
+```
+
+I think this should be a good approach that will be flexible, but I need to test on GHA.
+The nox tests pass, including the one that I added to test the rendering.
+
+Next I need to better understand how PheWeb is making the Manhattan plots.
+I'm curious how many points are actually being plotted, since the plots load very quickly
+and the MLMA files can be very large.

@@ -16,5 +16,5 @@ def test_version():
 
 def test_parse_help():
     """Test the help message for the parse command."""
-    result = runner.invoke(spheweb, ["parse", "--help"])
+    result = runner.invoke(spheweb, ["build", "--help"])
     assert result.exit_code == 0
