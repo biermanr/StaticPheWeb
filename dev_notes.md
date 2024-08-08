@@ -35,3 +35,16 @@ which worked and could be accessed with the following code:
 import importlib.resources
 p = importlib.resources.files("templates", "template.html")
 ```
+
+This is working with nox and pytest locally, but not on GHA. I think
+this is because the package data is not being included in the wheel.
+How can I test this locally?
+
+I still don't know how to test it locally, but Vineet suggested that I
+use this setup where I list the paths to the files in the package data:
+```toml
+[tool.setuptools.package-data]
+spheweb = ["templates/*.html"]
+```
+
+this works locally with nox and pytest, so I'm going to try it on GHA.

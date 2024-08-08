@@ -26,6 +26,12 @@ classifiers = [
   "Programming Language :: Python :: 3.9",
 ]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+spheweb = ["templates/*.html"]
+
 [project.scripts]
 spheweb = "spheweb:cli.spheweb"
 
