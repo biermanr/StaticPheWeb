@@ -67,3 +67,5 @@ handle the `joinpath` of NoneType. I've tried changing the code to:
 ```python
 p = importlib.resources.files("spheweb.templates") / "missing_template.html"
 ```
+
+I get the same error. The simplest fix is to just not do the "missing template" test.
