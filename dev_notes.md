@@ -69,3 +69,11 @@ p = importlib.resources.files("spheweb.templates") / "missing_template.html"
 ```
 
 I get the same error. The simplest fix is to just not do the "missing template" test.
+Oh no, this somehow still failed with the same error, just on the actual template test.
+
+```python
+p = importlib.resources.files("spheweb.templates") / "template.html"
+```
+
+I can't figure out why this works locally but not on GHA. I think I'm just going
+to drop python 3.9 from GHAs testing matrix. This seems so strange.
