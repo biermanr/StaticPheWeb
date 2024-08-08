@@ -48,3 +48,22 @@ spheweb = ["templates/*.html"]
 ```
 
 this works locally with nox and pytest, so I'm going to try it on GHA.
+This worked for GHA for python 3.10, 3.11, and 3.12, but not for 3.9.
+Actually 3.9 fails on windows, mac, and ubuntu.
+I get the error:
+```
+TypeError: expected str, bytes or os.PathLike object, not NoneType
+```
+
+on this line:
+```python
+p = importlib.resources.files("spheweb.templates").joinpath("missing_template.html")
+```
+
+I think this is because the `importlib.resources.files` function is not
+returning a `pathlib.Path` object, but I'm not sure why. Maybe I need to
+use a backport of importlib.resources? No, it's actually because it doesn't
+handle the `joinpath` of NoneType. I've tried changing the code to:
+```python
+p = importlib.resources.files("spheweb.templates") / "missing_template.html"
+```
