@@ -6,8 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "spheweb"
 version = "0.0.1"
 dependencies = [
-    "click",
-    "Jinja2",
+  "click",
+  "Jinja2",
 ]
 requires-python = ">=3.9"
 authors = [
@@ -24,6 +24,13 @@ classifiers = [
   "Programming Language :: Python :: 3.7",
   "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest",
+  "pytest-cov",
+  "html5lib",
 ]
 
 [tool.setuptools.packages.find]

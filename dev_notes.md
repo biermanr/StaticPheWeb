@@ -200,3 +200,17 @@ with the data from the json file and as simple of D3 as I can manage.
 Ok! I got the Manhattan plot working with the pre-processed json data!
 This is pretty exciting, next step is going to be to try and remove any
 extra code, try to simplify the D3 code as much as possible and add tests.
+What is pp1() vs. pp2() vs. pp3() etc?
+
+When I commented out pp2(), it removed the most significant points from the plot.
+Ok, apparently pp1() is for "variant_hover_rings"(?) which have opacity of 0
+meaning that they are invisible. pp2() is for "variant_points" which are the actual
+dots in the plot. Removing pp1() doesn't seem to have any ill-effects.
+
+Getting rid of pp3() removes the low p-value points from the plot.
+
+I've renamed pp2() to `add_variant_points()` and pp3() to `add_variant_bins()`.
+
+Ok, now how am I going to test this? I could parse the resulting HTML file
+to ensure that it's valid HTML at the very least. I think SELENIUM testing
+is overkill for this project, but I could use it to test the interactivity of the plot.

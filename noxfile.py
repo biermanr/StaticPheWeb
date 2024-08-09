@@ -7,7 +7,5 @@ import nox
 @nox.session(python=["3.9", "3.11", "3.12"])
 def tests(session):
     """Test install and pytest."""
-    session.install(".")
-    session.install("pytest-cov")
-    session.install("pytest")
+    session.install(".[test]")
     session.run("pytest", "--cov")

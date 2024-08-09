@@ -3,26 +3,46 @@
 from pathlib import Path
 from typing import Any
 
-from spheweb import process
+import html5lib  # type: ignore
+import spheweb
 
 
-def test_render(tmpdir: Any) -> None:
-    """Test the render_html function with mock data."""
+def test_render_manhattan(tmpdir: Any) -> None:
+    """Test the render_manhattan function with mock data."""
     d = Path(tmpdir)
+
+    # Mock data, single variant and single bin
     data = {
-        "2023-01-01": 100,
-        "2023-02-01": 20,
-        "2023-03-01": 30,
-        "2023-04-01": 40,
-        "2023-05-01": 50,
-        "2023-06-01": 60,
-        "2023-07-01": 70,
-        "2023-08-01": 80,
-        "2023-09-01": 90,
-        "2023-10-01": 100,
-        "2023-11-01": 90,
-        "2023-12-01": 80,
-        "2024-01-01": 70,
+        "unbinned_variants": [
+            {
+                "alt": "C",
+                "beta": -0.15,
+                "chrom": "15",
+                "maf": 0.48,
+                "nearest_genes": "IGF1",
+                "num_significant_in_peak": 290,
+                "peak ": True,
+                "pos ": 41521885,
+                "pval ": 9e-50,
+                "ref ": "T",
+                "rsids": "",
+            },
+        ],
+        "variant_bins": [
+            {
+                "chrom": "1",
+                "color": "rgb(120,120,186)",
+                "pos": 1500000,
+                "qval_extents": [
+                    [0.05, 2.85],
+                    [3.35, 3.45],
+                ],
+                "qvals": [3.05, 3.65, 3.95],
+            }
+        ],
     }
 
-    process.render_html(d, {"name": "Dave", "data": data})
+    spheweb.process.render_manhattan_plot(d, {"data": data})
+
+    parser = html5lib.HTMLParser(strict=True)
+    parser.parse(d.joinpath("manhattan.html").read_text())
