@@ -1,5 +1,6 @@
 """Command line interface for spheweb."""
 
+import json  # NOTE, move somewhere else
 from pathlib import Path
 
 import click
@@ -16,27 +17,13 @@ def spheweb() -> None:
 
 @spheweb.command()
 @click.argument("out_dir", type=Path)
-def build(out_dir) -> None:
+@click.argument("json_file", type=Path)
+def build(out_dir, json_file) -> None:
     """Parse inputs to generate a static pheweb visualization."""
     # Create an pheweb.html file which contains the HTML/CSS/JS/DATA for the pheweb
     # visualization using jinja2 with a template
 
-    data = {
-        "2023-01-01": 100,
-        "2023-02-01": 20,
-        "2023-03-01": 30,
-        "2023-04-01": 40,
-        "2023-05-01": 50,
-        "2023-06-01": 60,
-        "2023-07-01": 70,
-        "2023-08-01": 80,
-        "2023-09-01": 90,
-        "2023-10-01": 100,
-        "2023-11-01": 90,
-        "2023-12-01": 80,
-        "2024-01-01": 70,
-    }
+    with open(json_file) as f:
+        data = json.load(f)
 
-    process.render_html(
-        out_dir, {"name": "Jake", "data": data}
-    )  # NOTE fake hardcoded data for now
+    process.render_manhattan_plot(out_dir, {"data": data})
