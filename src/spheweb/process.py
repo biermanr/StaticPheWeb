@@ -4,7 +4,7 @@ import importlib.resources
 from pathlib import Path
 from typing import Any, Dict
 
-from jinja2 import Environment, FileSystemLoader  # type: ignore
+from jinja2 import Environment, FileSystemLoader
 
 
 def render_manhattan_plot(out_dir: Path, data: Dict[str, Any]) -> None:

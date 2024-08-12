@@ -214,3 +214,140 @@ I've renamed pp2() to `add_variant_points()` and pp3() to `add_variant_bins()`.
 Ok, now how am I going to test this? I could parse the resulting HTML file
 to ensure that it's valid HTML at the very least. I think SELENIUM testing
 is overkill for this project, but I could use it to test the interactivity of the plot.
+
+Ok, I added this and it passes, but again it's not testing the javascript, just the HTML.
+
+Now I'm going to switch gears and figure out how the json file is created by
+PheWeb from the input CSV data. This is done in the `manhattan.py` file here:
+`https://github.com/AkeyLab/DAP_pheweb/blob/master/pheweb/load/manhattan.py`
+and it's only ~200 lines long.
+
+Seems like the crux of the code is:
+```python
+def make_manhattan_json_file_explicit(in_filepath:str, out_filepath:str) -> None:
+    binner = Binner()
+    with VariantFileReader(in_filepath) as variants:
+        for variant in variants:
+            binner.process_variant(variant)
+    data = binner.get_result()
+    write_json(filepath=out_filepath, data=data)
+```
+
+where Binner is a class created in this file that has a `process_variant` method.
+
+The `for` loop is processing each variant in the input CSV file withe the Binner,
+which is handling the logic of identifying peaks in the data. This is documented
+very nicely in the function docstring:
+
+```python
+def process_variant(self, variant:Variant) -> None:
+    '''
+    There are 3 types of variants:
+        a) If the variant starts or extends a peak and has a stronger pval than the current `peak_best_variant`:
+            1) push the old `peak_best_variant` into `unbinned_variant_pq`.
+            2) make the current variant the new `peak_best_variant`.
+        b) If the variant ends a peak, push `peak_best_variant` into `peak_pq` and push the current variant into `unbinned_variant_pq`.
+        c) Otherwise, just push the variant into `unbinned_variant_pq`.
+    Whenever `peak_pq` exceeds the size `conf.get_manhattan_peak_max_count()`, push its member with the weakest pval into `unbinned_variant_pq`.
+    Whenever `unbinned_variant_pq` exceeds the size `conf.get_manhattan_num_unbinned()`, bin its member with the weakest pval.
+    So, at the end, we'll have `peak_pq`, `unbinned_variant_pq`, and `bins`.
+    '''
+```
+
+So, this answers my question of what the `variant_bins` and `unbinned_variants` are in the json file.
+The `variant_bins` are the peaks in the data, and the `unbinned_variants` are the "combined" variants that are not in a peak.
+Basically, "standout" vs. "normal" variants. I think there might be a simpler way to do this where you just bin all the variants
+by a static window-size and only display the most significant variant per-window in the plot. The human
+genome is 3.2 billion base pairs long, so if we bin by 1 million base pairs, we'd have 3,200 bins. Hmm, maybe this is
+not as good as the current method. Oh wait, they use a `BIN_LENGTH` of 3e6, so ~1,000 bins for the human genome.
+Maybe the simpler approach I'm thinking about will be fine afterall.
+
+Some of the MLMA files has 11 million variants, so these are getting boiled down to ~800 bins + 500 variants by current PheWeb.
+For dog weight phenotype, there are only 42 bins for chr1, 29 for chr2, 31 for chr3.
+Maybe I'll create an abstract base class for the Binner and then create a new class that just bins by a static window-size.
+Then if that looks bad I can create a new Binner that bins by peaks, or some other method.
+
+Ok, I started adding this, but I'm making a lot of architectural decisions all at once, so I'm going to hold off for now.
+Instead I'm going to try to think of what the user interface for this tool will look like.
+
+Let's say the user runs the following command:
+```bash
+spheweb build \
+    --gtf genes.gtf \
+    --chroms chroms.txt \
+    --phenos pheno-list.json \
+```
+
+Where `genes.gtf` is a GTF file with the gene annotations and `pheno-list.json` is a json file with the list of per-phenotype MLMA/CSV files.
+The `chroms.txt` file is just a text file with a column for chromosome names, start, and end positions, like:
+```
+chr1 1 248956422
+chr2 1 242193529
+...
+```
+
+We can have some default `--chroms` like how plink does it with `--chroms hg19` or `--chroms hg38` or `--chroms canFam4` etc.
+spheweb should also accept gff3 files since those are supposed to be the new standard for gene annotations.
+Finally, maybe we could provide the option to download the gene annotations and chromosomes from UCSC, but having users
+download a gtf file themselves sounds like a good place to start.
+
+We can have `pheno-list.json` be the same structure as PheWeb currently uses, something like:
+```json
+{
+    "phenos": [
+        {
+            "name": "Dog Weight",
+            "file": "dog_weight.csv"
+        },
+        {
+            "name": "Dog Height",
+            "file": "dog_height.csv"
+        }
+    ]
+}
+```
+This file might not be the easiest format for people to use, but it's a good place to start since PheWeb already demands it.
+Maybe there can be a separate spheweb command eventually that will take a directory of MLMA files and create this `pheno-list.json` file.
+We can have some other configuration parameters eventually, but not at the start.
+
+
+Aug 12th 2024: Data validation
+---
+
+I started today thinking I would copy the PheWeb binning code for manhattan plots, so I was reading through the `manhattan.py` file
+and I saw that they do a good job of validating the input data CSV/TSV which I hadn't considered.
+
+I like how simple their validating/parsing/binning code looks:
+```python
+def make_manhattan_json_file_explicit(in_filepath:str, out_filepath:str) -> None:
+    binner = Binner()
+    with VariantFileReader(in_filepath) as variants:
+        for variant in variants:
+            binner.process_variant(variant)
+    data = binner.get_result()
+    write_json(filepath=out_filepath, data=data)
+```
+
+I want to copy this idea where there is a `Parsing` abstract base class that is
+responsible for validating the input data from a few different common formats.
+Then the `Binning` classes will make use of the `Parsing` classes to get the data.
+I'm thinking that the `Parsing` class will be iterable and will yield the validated
+data row-by-row. This way the `Binning` classes can be more flexible in how they
+process the data. All the different `Parsing` classes will need to provide the same
+interface, which I can do by having a `Variant` dataclass that all the `Parsing` classes
+will return.
+
+I'll start with creating the `Variant` pydantic class and test that
+with different inputs. So far I'm pleased with how this is going, its
+been really easy and expressive to define:
+* Optional fields
+* Multiple aliases for the same field
+* Bounds on numeric fields
+
+I've written multiple tests for validating a test variant dictionary
+including tests that use `pytest.raises` to ensure certain inputs fail.
+The error messages are currently very ugly, but I'll fix that later.
+
+Ok, I think I've got the `Variant` class working well, so I'm going to
+move on to the `Parsing` classes. I'm going to start with the `CSVParser`
+which will use the `csv` module to read in the data and validate it.

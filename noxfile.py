@@ -8,4 +8,4 @@ import nox
 def tests(session):
     """Test install and pytest."""
     session.install(".[test]")
-    session.run("pytest", "--cov")
+    session.run("pytest")

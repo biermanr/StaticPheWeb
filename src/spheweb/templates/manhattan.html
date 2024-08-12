@@ -269,12 +269,14 @@
             var tooltip_template = _.template(
                 window.model.tooltip_underscoretemplate +
                 "<% if(_.has(d, 'num_significant_in_peak') && d.num_significant_in_peak>1) { %>#significant variants in peak: <%= d.num_significant_in_peak %><br><% } %>");
+
             var point_tooltip = d3.tip()
                 .attr('class', 'd3-tip')
                 .html(function (d) {
                     return tooltip_template({ d: d });
                 })
                 .offset([-6, 0]);
+
             gwas_svg.call(point_tooltip);
 
             function get_link_to_LZ(variant) {
