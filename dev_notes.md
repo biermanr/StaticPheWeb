@@ -351,3 +351,34 @@ The error messages are currently very ugly, but I'll fix that later.
 Ok, I think I've got the `Variant` class working well, so I'm going to
 move on to the `Parsing` classes. I'm going to start with the `CSVParser`
 which will use the `csv` module to read in the data and validate it.
+
+I moved on to writing a CSV parser, and WOW I was not expecting how nice
+the code would look:
+```python
+class CSVParser(Parser):
+    """Parser for CSV/TSV files."""
+    def __init__(self, file_path: Path):
+        self.file_path = file_path
+
+    def __iter__(self) -> Iterable[variant.Variant]:
+        """Parse the input CSV file and return a generator of Variant."""
+        with open(self.file_path, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                yield variant.Variant(**row)
+```
+
+I wrote a test, with the help of github copilot that:
+1. Writes a mock CSV file with two lines of data
+2. Creates a `CSVParser` object with the mock file
+3. Iterates over the `CSVParser` object and checks that the data is correct
+
+This works so well, and it seems so simple!
+I ended up renaming `CSVParser` to `TabularParser` since it can handle both CSV and TSV files, etc. Added an additional test for TSV.
+
+pydantic is really nice for this use case, and having github copilot
+help write tests is really nice.
+
+
+Aug 13th 2024: ???
+---
