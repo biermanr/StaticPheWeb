@@ -43,6 +43,11 @@ spheweb = ["templates/*.html"]
 [project.scripts]
 spheweb = "spheweb:cli.spheweb"
 
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+
 [tool.ruff]
 exclude = [
     ".eggs",

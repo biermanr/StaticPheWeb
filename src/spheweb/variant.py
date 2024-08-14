@@ -4,53 +4,24 @@ import typing
 
 from pydantic import AliasChoices, BaseModel, Field
 
-# NOTE TODO Define the valid chromosomes dynamically from config
-CHROMS = typing.Literal[
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "6",
-    "7",
-    "8",
-    "9",
-    "10",
-    "11",
-    "12",
-    "13",
-    "14",
-    "15",
-    "16",
-    "17",
-    "18",
-    "19",
-    "20",
-    "21",
-    "22",
-    "X",
-    "Y",
-    "MT",
-]
-
 
 class Variant(BaseModel):  # type: ignore
     """pydantic model for a variant/SNP."""
 
-    chromosome: typing.Literal[CHROMS] = Field(
+    chrom: str = Field(
         validation_alias=AliasChoices(
             "chromosome", "chrom", "chr", "#chrom", "#chromosome", "#chr"
         )
     )
-    position: int = Field(ge=0, validation_alias=AliasChoices("position", "pos"))
-    ref_allele: str = Field(
+    pos: int = Field(ge=0, validation_alias=AliasChoices("position", "pos"))
+    ref: str = Field(
         min_length=1, max_length=1, validation_alias=AliasChoices("ref_allele", "ref")
     )
-    alt_allele: str = Field(
+    alt: str = Field(
         min_length=1, max_length=1, validation_alias=AliasChoices("alt_allele", "alt")
     )
-    p_value: float = Field(
-        ge=0, le=1, validation_alias=AliasChoices("p_value", "pval", "p_val")
+    pval: float = Field(
+        ge=0, le=1, validation_alias=AliasChoices("pval", "p_value", "p_val")
     )
     minor_allele_frequency: typing.Optional[float] = Field(
         default=None,

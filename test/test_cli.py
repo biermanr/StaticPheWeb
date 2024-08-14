@@ -18,3 +18,9 @@ def test_parse_help():
     """Test the help message for the parse command."""
     result = runner.invoke(spheweb, ["build", "--help"])
     assert result.exit_code == 0
+
+
+def test_validate_input_help():
+    """Test the help message for the validate_input command."""
+    result = runner.invoke(spheweb, ["validate-input", "--help"])
+    assert result.exit_code == 0

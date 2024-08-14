@@ -18,11 +18,11 @@ def test_good_variant_reqd_only() -> None:
     }
 
     v = variant.Variant(**data)
-    assert v.chromosome == "1"
-    assert v.position == 12345
-    assert v.ref_allele == "A"
-    assert v.alt_allele == "T"
-    assert v.p_value == 0.001
+    assert v.chrom == "1"
+    assert v.pos == 12345
+    assert v.ref == "A"
+    assert v.alt == "T"
+    assert v.pval == 0.001
     assert v.minor_allele_frequency == 0.5
     assert v.effect_size == 0.5
 
@@ -41,11 +41,11 @@ def test_good_variant_with_optionals() -> None:
     }
 
     v = variant.Variant(**data)
-    assert v.chromosome == "1"
-    assert v.position == 12345
-    assert v.ref_allele == "A"
-    assert v.alt_allele == "T"
-    assert v.p_value == 0.001
+    assert v.chrom == "1"
+    assert v.pos == 12345
+    assert v.ref == "A"
+    assert v.alt == "T"
+    assert v.pval == 0.001
     assert v.minor_allele_frequency == 0.5
     assert v.effect_size == 0.5
     assert v.alt_allele_freq == 0.5
@@ -76,34 +76,6 @@ def test_missing_required(reqd_field: str) -> None:
     del data[reqd_field]
 
     with pytest.raises(pydantic.ValidationError):
-        variant.Variant(**data)
-
-
-@pytest.mark.parametrize(
-    "chrom_field",
-    [
-        "chromosome",
-        "chrom",
-        "chr",
-        "#chrom",
-        "#chromosome",
-        "#chr",
-    ],
-)  # type: ignore
-def test_bad_chrom(chrom_field: str) -> None:
-    """Bad chromosome should fail."""
-    data = {
-        chrom_field: "230",
-        "position": 12345,
-        "ref_allele": "A",
-        "alt_allele": "T",
-        "pval": 0.001,
-        "minor_allele_frequency": 0.5,
-        "effect_size": 0.5,
-        "alt_allele_freq": 0.5,
-    }
-
-    with pytest.raises(pydantic.ValidationError, match=chrom_field):
         variant.Variant(**data)
 
 
@@ -171,4 +143,4 @@ def test_multiple_chromosome_fields() -> None:
     }
 
     v = variant.Variant(**data)
-    assert v.chromosome == "1"
+    assert v.chrom == "1"

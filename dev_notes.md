@@ -380,5 +380,184 @@ pydantic is really nice for this use case, and having github copilot
 help write tests is really nice.
 
 
-Aug 13th 2024: ???
+Aug 13th 2024: Implementing the Binner
 ---
+
+Yesterday I got the `Variant` and `TabularParser` classes working, so today I'm going to implement a `Binner` class.
+
+The `Binner` from PheWeb is kind of complicated,
+so it might take me a while to implement it in a
+way that I understand and I'm happy with, but it
+will be nice to have the compatibility with PheWeb
+and know what output I should be getting.
+
+Maybe before doing this though, I'm a little nervous
+that the `TabularParser` is slow for the large MLMA files, so I'm going to test how long it takes to
+just parse one of the DAP MLMA files, maybe weight.
+This file is ~500 MB in size with 9.8M lines.
+
+I added a click subcommand `validate_input` which just creates a tabular parser, and iterates through
+the lines, counting how many there are:
+
+```python
+@spheweb.command()
+@click.argument("tabular_file", type = Path)
+@click.option("--delim", "-d", default=',', type = str)
+def validate_input(tabular_file, delim) -> None:
+    """Validate format of input CSV file, or use --delim to specify other tabular format."""
+    num_lines = sum(1 for _ in parsing.TabularParser(tabular_file, delim))
+    click.echo(f"File {tabular_file} with {num_lines} successfully parsed!")
+```
+
+It "only" took 25 seconds to get through this file,
+so it's not terribly unworkably slow for now,
+but I'm certain it could be a lot faster. Iterating
+over the lines with just a `with open()` and not
+validating the input only takes 1 second.
+
+If someone had 300 phenotypes they wanted to use
+for the PheWeb, it would take 150 minutes or around
+2 hours, and this is just for parsing the input.
+
+How long does it take if I use the `csv.DictReader`
+but not the `pydantic` model for validation? 9 seconds, ok. So the `csv.DictReader` is slow, but
+so is the pydantic model parsing. I'll put this
+on the backburner for now and try to get something
+working all the way through first.
+
+#### Understanding the Binner
+Ok, now I'm going to read through the PheWeb binning
+code more closely and take notes. It inits the
+`Binner` with two `MaxPriorityQueue` objects that
+PheWeb defined itself. The goal of these queue's is
+to be a maximum size heap that maintains heap order.
+
+The function `process_variant` is called for each
+variant in the input data. It has some logic to
+try and figure out how many bins to create, but I
+think it's flawed since it can be set and unset
+by subsequent variants in the list, so the order
+of variants will effect the final number of bins.
+
+```python
+if variant['pval'] != 0:
+    qval = -math.log10(variant['pval'])
+    if qval > 40:
+        self._qval_bin_size = 0.2 # this makes 200 bins for a y-axis extending past 40 (but folded so that the lower half is 0-20)
+    elif qval > 20:
+        self._qval_bin_size = 0.1 # this makes 200-400 bins for a y-axis extending up to 20-40.
+```
+
+Next, if a variant is in a peak because it has
+a sufficiently low p-value, it will be added to
+an existing peak or a new peak will be created.
+
+```python
+if variant['pval'] < conf.get_manhattan_peak_pval_threshold(): # part of a peak
+    if self._peak_best_variant is None: # open a new peak
+        ...
+
+    elif self._peak_last_chrpos[0] == variant['chrom'] and self._peak_last_chrpos[1] + conf.get_manhattan_peak_sprawl_dist() > variant['pos']: # extend current peak
+        ...
+
+    else: # new chromosome or far enough away, close old peak and open new peak
+        ...
+```
+
+So it seems like it's looking one sorted variant
+at a time and deciding where to put the variant.
+
+There are two helper functions for actually pushing onto the peak and bin priority queues.
+
+```python
+    def _maybe_peak_variant(self, variant:Variant) -> None:
+        self._peak_pq.add_and_keep_size(variant, variant['pval'],
+                                        size=conf.get_manhattan_peak_max_count(),
+                                        popped_callback=self._maybe_bin_variant)
+
+    def _maybe_bin_variant(self, variant:Variant) -> None:
+        self._unbinned_variant_pq.add_and_keep_size(variant, variant['pval'],
+                                                    size=conf.get_manhattan_num_unbinned(),
+                                                    popped_callback=self._bin_variant)
+```
+
+So the `Binner` is maintaining two priority queues, one for the peaks and one for the unbinned variants. Each entry in the priority queue is a single `Variant` object that is used as the
+representative of the peak or bin.
+
+The `popped_callback` is a function that gets called for variants that are removed from
+the peak priority queue, to see if it should be added to the bin pq, and then finally to
+the _bin_variant function which actually bins the variant.
+
+I don't know why this code feels so complicated, I still don't have a great understanding
+of what it's trying to accomplish. Which Variants should be Peaks, and which should be Bins?
+
+I see there is a `conf.py` file which specifies a maximum of 500 peaks and 500 bins.
+And there is a "sprawl distance" of 200_000 which is used to determine the maximum distance
+between two significant variants to be considered part of the same peak.
+
+Ok, maybe this is as far as I go into understanding the code, and I'm just going to implement
+it as is and make sure I can get the same output as PheWeb.
+
+Update on this. I was able to get the legacy
+code working, linted, mypy'd, and tested.
+It ran without error, but produced a
+different JSON output on the same input data.
+Oh, I should also say I was able to get a manhattan d3 plot
+working after I adjusted the `Variant` pydantic class to have
+the same field names as the PheWeb `Variant` dict.
+
+I will have to return to this, I want to know why there are
+differences when I copied/pasted their code and made what I thought
+were only refactorings.
+
+I also learned a lot about Iterable vs. Iterator (mypy wants the later)
+and I made some more organization decisions about the project structure.
+Right now, for example, Binner's must use a parser as an argument to
+their `bin` function.
+
+Aug 14th 2024: Continued work on Binner
+---
+I thought I'd check to make sure that the json file I copied
+from a previous PheWeb run was the same as if I generate it again
+using the DAP pheweb, so I ran `pheweb process` on just the weight
+CSV file. This was also helpful in seeing that the `parse-input-files`
+step took 88 seconds for the single phenotype, so the 30 seconds I'm
+seeing (so far at least) isn't too bad.
+
+```bash
+==> Starting `pheweb parse-input-files`
+Processing 1 phenos
+Completed    1 tasks in 87 seconds
+==> Completed in 88 seconds
+```
+
+Oh wait, this parse-input-files step actually just
+takes the input CSV, parses it, and generates and output
+gzipped CSV in `generated-by-pheweb/parsed/Weight`
+
+I saw that this file is 9,867,132 lines long, so it's
+just a pre-processing step that I'm pretty sure we don't
+need to copy. There is a lot of logic in the
+`pheweb/load/read_input_file.py` script which is already
+handled for us by pydantic, except we need to add ordering
+checks to make sure the chromosomes and positions are in order.
+
+I'll add these checks now before I forget.
+My idea is to make the `Parser` class accept
+a `ChromList` object.
+
+I'm actually having trouble figuring out
+how to add the order-validation logic
+into the parser. I want to ensure that
+when someone writes a new parser, they
+don't forget to validate the order. So
+I don't want to just add this logic to
+the __iter__ method of the TabularParser.
+
+Maybe I should be using a normal class
+for Parser instead of an abstract base
+class, so that way I can implement the
+`__iter__` method in the base class and
+have it call a `validate_order` method
+that will also be implemented in the base
+class.
