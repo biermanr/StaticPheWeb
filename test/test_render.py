@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any
 
-import html5lib  # type: ignore
+import html5lib
 import spheweb
 
 
@@ -12,6 +12,7 @@ def test_render_manhattan(tmpdir: Any) -> None:
     d = Path(tmpdir)
 
     # Mock data, single variant and single bin
+    # TODO make pydantic classes for plot/table data
     data = {
         "unbinned_variants": [
             {
@@ -21,10 +22,11 @@ def test_render_manhattan(tmpdir: Any) -> None:
                 "maf": 0.48,
                 "nearest_genes": "IGF1",
                 "num_significant_in_peak": 290,
-                "peak ": True,
-                "pos ": 41521885,
-                "pval ": 9e-50,
-                "ref ": "T",
+                "peak": True,
+                "pos": 41521885,
+                "pval": 9e-50,
+                "effect_size": -0.15,
+                "ref": "T",
                 "rsids": "",
             },
         ],

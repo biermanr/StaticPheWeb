@@ -4,15 +4,15 @@ import heapq
 import math
 from typing import Any, Iterable, Optional
 
-from . import binning, parsing, variant
+from . import binning, parsing
 
 
-class LegacyBinner(binning.Binner):
+class LegacyBinner(binning.Binner):  # type: ignore
     """PheWeb-style binning of SNPs."""
 
     def __init__(self) -> None:
         """Initialize the binner."""
-        self._peak_best_variant: Optional[variant.Variant] = None
+        self._peak_best_variant: Optional[dict[str, Any]] = None
         self._peak_last_chrpos: tuple[str, int] = ("", 0)
         self._peak_pq: MaxPriorityQueue = MaxPriorityQueue()
         self._unbinned_variant_pq: MaxPriorityQueue = MaxPriorityQueue()
@@ -83,14 +83,15 @@ class LegacyBinner(binning.Binner):
     def bin(self, parser: parsing.Parser) -> dict[str, Any]:
         """Perform PheWeb binning."""
         for v in parser:
+            v = dict(v)  # convert pydantic model to dict to add previously used fields
             self.process_variant(v)
 
         return self.get_result()
 
-    def process_variant(self, variant: variant.Variant) -> None:
+    def process_variant(self, variant: dict[str, Any]) -> None:
         """Process a single variant."""
-        if variant.pval != 0:
-            qval = -math.log10(variant.pval)
+        if variant["pval"] != 0:
+            qval = -math.log10(variant["pval"])
             if qval > 40:
                 self._qval_bin_size = 0.2  # this makes 200 bins for a y-axis extending past 40 (but folded so that the lower half is 0-20)
             elif qval > 20:
@@ -98,77 +99,82 @@ class LegacyBinner(binning.Binner):
                     0.1  # this makes 200-400 bins for a y-axis extending up to 20-40.
                 )
 
-        if variant.pval < self.manhattan_peak_pval_threshold:  # part of a peak
+        if variant["pval"] < self.manhattan_peak_pval_threshold:  # part of a peak
             if self._peak_best_variant is None:  # open a new peak
                 self._peak_best_variant = variant
-                self._peak_last_chrpos = (variant.chrom, variant.pos)
+                self._peak_last_chrpos = (variant["chrom"], variant["pos"])
                 self._num_significant_in_current_peak = (
                     1
-                    if variant.pval
+                    if variant["pval"]
                     < self.manhattan_peak_variant_counting_pval_threshold
                     else 0
                 )
             elif (
-                self._peak_last_chrpos == (variant.chrom, variant.pos)
+                self._peak_last_chrpos[0] == variant["chrom"]
                 and self._peak_last_chrpos[1] + self.manhattan_peak_sprawl_dist
-                > variant.pos
+                > variant["pos"]
             ):  # extend current peak
-                if variant.pval < self.manhattan_peak_variant_counting_pval_threshold:
+                if (
+                    variant["pval"]
+                    < self.manhattan_peak_variant_counting_pval_threshold
+                ):
                     self._num_significant_in_current_peak += 1
-                self._peak_last_chrpos = (variant.chrom, variant.pos)
-                if variant.pval >= self._peak_best_variant.pval:
+                self._peak_last_chrpos = (variant["chrom"], variant["pos"])
+                if variant["pval"] >= self._peak_best_variant["pval"]:
                     self._maybe_bin_variant(variant)
                 else:
                     self._maybe_bin_variant(self._peak_best_variant)
                     self._peak_best_variant = variant
             else:  # close old peak and open new peak
-                # self._peak_best_variant["num_significant_in_peak"] = (
-                #    self._num_significant_in_current_peak
-                # )
+                self._peak_best_variant["num_significant_in_peak"] = (
+                    self._num_significant_in_current_peak
+                )
                 self._num_significant_in_current_peak = (
                     1
-                    if variant.pval
+                    if variant["pval"]
                     < self.manhattan_peak_variant_counting_pval_threshold
                     else 0
                 )
                 self._maybe_peak_variant(self._peak_best_variant)
                 self._peak_best_variant = variant
-                self._peak_last_chrpos = (variant.chrom, variant.pos)
+                self._peak_last_chrpos = (variant["chrom"], variant["pos"])
         else:
             self._maybe_bin_variant(variant)
 
-    def _maybe_peak_variant(self, variant: variant.Variant) -> None:
+    def _maybe_peak_variant(self, variant: dict[str, Any]) -> None:
         """Add a variant to the peak queue if it's significant enough."""
         self._peak_pq.add_and_keep_size(
             variant,
-            variant.pval,
+            variant["pval"],
             size=self.manhattan_peak_max_count,
             popped_callback=self._maybe_bin_variant,
         )
 
-    def _maybe_bin_variant(self, variant: variant.Variant) -> None:
+    def _maybe_bin_variant(self, variant: dict[str, Any]) -> None:
         """Add a variant to the unbinned queue if it's significant enough."""
         self._unbinned_variant_pq.add_and_keep_size(
             variant,
-            variant.pval,
+            variant["pval"],
             size=self.manhattan_num_unbinned,
             popped_callback=self._bin_variant,
         )
 
-    def _bin_variant(self, variant: variant.Variant) -> None:
+    def _bin_variant(self, variant: dict[str, Any]) -> None:
         """Add a variant to the appropriate bin."""
-        chrom_idx = self.chrom_order[variant.chrom]
+        chrom_idx = self.chrom_order[variant["chrom"]]
         if chrom_idx not in self._bins:
             self._bins[chrom_idx] = {}
-        pos_bin_id = variant.pos // self.BIN_LENGTH
+        pos_bin_id = variant["pos"] // self.BIN_LENGTH
         if pos_bin_id not in self._bins[chrom_idx]:
             self._bins[chrom_idx][pos_bin_id] = {
-                "chrom": variant.chrom,
+                "chrom": variant["chrom"],
                 "startpos": pos_bin_id * self.BIN_LENGTH,
                 "qvals": set(),
             }
         qval = (
-            math.inf if variant.pval == 0 else self._rounded(-math.log10(variant.pval))
+            math.inf
+            if variant["pval"] == 0
+            else self._rounded(-math.log10(variant["pval"]))
         )
         self._bins[chrom_idx][pos_bin_id]["qvals"].add(qval)
 
@@ -187,7 +193,7 @@ class LegacyBinner(binning.Binner):
         # for peak in peaks: peak['peak'] = True
         unbinned_variants = list(self._unbinned_variant_pq.pop_all())
         unbinned_variants = sorted(
-            unbinned_variants + peaks, key=(lambda variant: variant.pval)
+            unbinned_variants + peaks, key=(lambda variant: variant["pval"])
         )
 
         # unroll dict-of-dict-of-array `bins` into array `variant_bins`
@@ -251,16 +257,16 @@ class MaxPriorityQueue:
     def __init__(self) -> None:
         """Initialize the queue."""
         self._q: list[
-            tuple[float, Any, variant.Variant]
+            tuple[float, Any, dict[str, Any]]
         ] = []  # a heap-property-satisfying list like [(priority, ComparesFalse(), item), ...]
 
-    def add(self, item: variant.Variant, priority: float) -> None:
+    def add(self, item: dict[str, Any], priority: float) -> None:
         """Add an item to the queue."""
         heapq.heappush(self._q, (-priority, MaxPriorityQueue.ComparesFalse(), item))
 
     def add_and_keep_size(
         self,
-        item: variant.Variant,
+        item: dict[str, Any],
         priority: float,
         size: int,
         popped_callback: Any = None,
@@ -278,7 +284,7 @@ class MaxPriorityQueue:
             if popped_callback:
                 popped_callback(item)
 
-    def pop(self) -> variant.Variant:
+    def pop(self) -> dict[str, Any]:
         """Pop the item with the largest priority."""
         _, _, item = heapq.heappop(self._q)
         return item
@@ -287,7 +293,7 @@ class MaxPriorityQueue:
         """Return the number of items in the queue."""
         return len(self._q)
 
-    def pop_all(self) -> Iterable[variant.Variant]:
+    def pop_all(self) -> Iterable[dict[str, Any]]:
         """Pop all items in the queue."""
         while self._q:
             yield self.pop()

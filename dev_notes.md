@@ -561,3 +561,190 @@ class, so that way I can implement the
 have it call a `validate_order` method
 that will also be implemented in the base
 class.
+
+This is the implementation I decided on, but I think
+it's not very clean because there's a lot of validation
+logic for chroms/positions in the `Parser` base class
+that would make more sense to move to the `Variant` pydantic class.
+
+Ok, well that was a long aside in order to implement checks for
+the data being in order. Let's see how much those checks slow
+down the parsing with a call to `spheweb validate-input`. Oh,
+very nice, it's still 28 seconds!
+
+Returning to trying to figure out why the JSON produced by PheWeb
+and Spheweb are different. I think there might be additional processing
+occuring in the steps before the manhattan processing step. Here are the
+steps in order (there are a lot of steps):
+1. `pheweb phenolist verify`
+    * Took 0 seconds, just checks that the phenolist is valid
+2. `pheweb parse-input-files`
+    * Took 88 seconds to convert the input CSV into a parsed GZIP with the same number of rows
+3. `pheweb sites`
+    * Took 39 seconds. This extracts all variants from all phenotypes and unions them. Writing out to `sites/sites-unannotated.tsv`
+4. `pheweb make-gene-aliases-sqlite3`
+    * Took 51 seconds. This "Makes a database of all gene names and their aliases for easy searching."
+5. `pheweb add-rsids`
+    * Took 39 seconds. This annotates the sites with RSIDs. Writing out to `sites/sites-rsids.tsv`
+6. `pheweb add-genes`
+    * Took 71 seconds. Annotates the sites with the nearest genes. Writes out to `sites/sites.tsv`
+7. `pheweb make-cpras-rsids-sqlite3`
+    * Took 32 seconds. Makes a database to convert between RSIDs and chrom/pos/ref/alt (CPRA).
+8. `pheweb augment-phenos`
+    * Took 87 seconds. I think this is attributing the variants to the phenotypes. Produces the `generated-by-pheweb/pheno_gz/*.gz` files and associated tabix files.
+9. `pheweb matrix`
+    * Took 12 seconds. This "creates a single large tabix file with all the variants for all phenotypes." Produces `generated-by-pheweb/matrix.tsv.gz` and associated tabix file.
+10. `pheweb gather-pvalues-for-each-gene`
+    * Took 10 seconds. This gets the best p-values for each gene and writes out `generated-by-pheweb/best-phenos-by-gene.sqlite3`.
+11. `pheweb manhattan`
+    * Took 42 seconds and produced the `generated-by-pheweb/manhattan/Weight.json` file
+
+
+I reran all these steps and still got a disagreement for the JSON file between
+PheWeb and SpheWeb. They both have 764 `variant_bins`, although the binning
+is different, but additionally the `unbinned_variants` are different with
+PheWeb having 596 unbinned_variants and Spheweb having 1000 unbinned_variants.
+
+
+Aug 22st 2024: Continued Binner Tracing
+---
+Returning to this project after a break. Immediate todo is still to figure out why the
+`unbinned_variants` are different between PheWeb and Spheweb.
+
+I'm going to edit the steps list above with my understanding of what each step is doing.
+
+I think the `sites` step might be doing some filtering as it extracts all variants from all phenotypes and unions them.
+It uses the `VariantFileReader` in `file_utils` to read in the variants from the input
+CSV files. Spheweb doesn't use this because it reads in the variants directly from the input CSV file with the `TabularParser`.
+It looks like, no, there isn't any filtering going on here. The `class _vfr_only_per_variant_fields` is what's being used. I'll check the output of this
+step to verify. Ok, this file is gzipped, but has `9,867,132` lines, including the header line, which is the same as the original input, so no filtering is happening here.
+
+The `make_gene_aliases_sqlite3` step is creating a sqlite3 database of all gene names and their aliases for easy searching, I don't think this has anything to do with
+filtering the variants. The output of this step is `resources/gene_aliases-v{}.sqlite3`.
+
+Next is the `add-rsids` step which is annotating the sites with RSIDs. This produces the output file `sites/sites-rsids.tsv` which is also `9,867,132` lines long, so again no filtering is being done here.
+
+Next is the `add-genes` step which annotates with the closest gene. This produces the output file `sites/sites.tsv` which is also `9,867,132` lines long, so again no filtering is being done here.
+
+Next is the `augment_phenos` step which looks like it assigns each phenotype sites
+from the combined sites file. Since we're just running on weights, it just produces the `generated-by-pheweb/pheno_gz/Weight.gz` file and a corresponding tabix index. This file has `9,867,132` lines, so no filtering is being done here.
+
+Next is the `matrix` step which combines all the phenotypes into a single large tabix file. This produces the `generated-by-pheweb/matrix.tsv.gz` file which is also `9,867,132` lines long, so no filtering is being done here.
+
+Next is the `gather-pvalues-for-each-gene` step which gets the best p-values for each gene. This produces the `generated-by-pheweb/best-phenos-by-gene.sqlite3` file. And I don't think this has anything to do with the number of sites or filtering.
+
+Finally is the `manhattan` step which produces the `generated-by-pheweb/manhattan/Weight.json` file which is the one I'm comparing to the Spheweb output. This uses the
+`pheno_gz` gzipped tsv file `generated-by-pheweb/pheno_gz/Weight.gz` to produce
+the manhattan plot json file. It looks like I've pretty much copied all the logic
+from this step, so I'm not sure why the output is different.
+
+Maybe I'll try using the `pheno_gz` file from PheWeb for spheweb to see if that changes the output. Here's a quick comparison of the heads of these two files:
+
+```bash
+==>    dd_weight_lbs_N-7378.loco.csv  <==
+chrom  pos                            ref  alt  pval      beta           maf
+1      5753                           G    A    0.622122  0.00430721     0.42477600000000004
+1      13961                          G    T    0.622616  0.0141087      0.0194497
+1      14118                          G    C    0.721309  0.00951598     0.0242613
+1      14132                          A    C    0.999789  5.68787e-06    0.0385606
+1      14926                          C    T    0.786221  -0.00919041    0.0138927
+1      14935                          A    T    0.2782    -0.0391365     0.0119951
+1      14990                          G    A    0.125876  0.0279618      0.0508946
+1      15016                          G    A    0.637314  -0.00600085    0.120968
+1      15091                          A    T    0.981062  0.000608517    0.0238547
+
+==>    weight_pheno_gz.tsv            <==
+chrom  pos                            ref  alt  rsids     nearest_genes  pval       beta        maf
+1      5753                           G    A                   ENPP1     0.62       0.0043      0.42
+1      13961                          G    T                   ENPP1     0.62       0.014       0.019
+1      14118                          G    C                   ENPP1     0.72       0.0095      0.024
+1      14132                          A    C                   ENPP1     1.0        5.7e-06     0.039
+1      14926                          C    T                   ENPP1     0.79       -0.0092     0.014
+1      14935                          A    T                   ENPP1     0.28       -0.039      0.012
+1      14990                          G    A                   ENPP1     0.13       0.028       0.051
+1      15016                          G    A                   ENPP1     0.64       -0.006      0.12
+1      15091                          A    T                   ENPP1     0.98       0.00061     0.024
+```
+
+You can see that the `pheno_gz` (2nd file) has two additional columns,
+`rsids` and `nearest_genes`, but the rest of the columns are the same.
+Additionally the `pheno_gz` is rounding the values of `pval`, `beta`, and `maf`.
+
+I reran the `generate_legacy_manhattan_json` function with the `pheno_gz` file
+and got the same number of `unbinned_variants` as spheweb (1000) if its run
+directly on the CSV file. So now I'm convinced that the difference is due to
+the legacy_binning that I tried to implement.
+
+This was kind of a frustrating exercise, but also a good learning experience and
+another opportunity to walk through PheWeb's codebase.
+
+I've decided that I'm going to allow `variant` to just be a dict so that I can
+use all the logic and fields from the PheWeb binning, rather than using my new
+pydantic model. I had a few lines of code commented out that I didn't think was
+doing anything, but I was probably wrong(?). I'm rerunning with this change. Nope,
+still have 1000 unbinned_variants, instead of 596.
+
+Well I think I'm going to have to give up on this for now. Visually the plots
+look the same, so I'm not sure what the difference is. Next I'll implement the
+datatable below the plot and see if those differ.
+
+Adding the javascript datable under the plot
+----
+
+It looks like the StreamTable is created in the `pheno.html` template file by
+creating a `<table>` element with the id `stream_table`. There is an import
+for a local copy of the `pheweb/serve/static/vendor/stream_table-1.1.1.min.js`
+file.
+
+Also there is a call to `populate_streamtable(data.unbinned_variants);` in the
+`pheno.html` template. This function is defined in `pheweb/serve/static/pheno.js`.
+Note how it is only called with the `unbinned_variants` data.
+
+I think I'm instead just going to use Jinja templating to build the table without
+the use of the `stream_table` library. This won't have pagination, but I think it's
+an easy place to start and I can always add it later.
+
+I've made the table, it was really easy with jinja!
+Just added:
+```html
+<div id="variants_table_container">
+    <table id="stream_table" class="table table-striped table-bordered">
+    <thead>
+        <tr>
+        <th>Variant</th>
+        <th>Nearest Gene(s)</th>
+        <th>MAF</th>
+        <th>P-value</th>
+        <th>Effect Size (se)</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for v in data["unbinned_variants"] %}
+    <TR>
+        <TD>{{ '{}:{} {}/{}'.format(v["chrom"], v["pos"], v["ref"], v["alt"]) }}</TD>
+        <TD>No genes</TD>
+        <TD>{{ '{:.2e}'.format(v["minor_allele_frequency"]) }}</TD>
+        <TD>{{ '{:.2e}'.format(v["pval"]) }}</TD>
+        <TD>{{ '{:.2e}'.format(v["effect_size"]) }}</TD>
+    </TR>
+    {% endfor %}
+    </tbody>
+    </table>
+</div>
+```
+
+And this made an ugly table, but it's a start and looks like:
+```
+Variant	Nearest Gene(s)	MAF	P-value	Effect Size (se)
+15:41521885 T/C	No genes	4.82e-01	9.03e-50	-1.48e-01
+15:41521682 A/G	No genes	4.82e-01	1.11e-49	-1.48e-01
+```
+
+Actually, it looks like these two peaks are too close together, they are only 203 base pairs apart, which is closer than the 200,000 base pair sprawl distance. Looking at the PheWeb results, I only see the first peak, not the second. Ahah! This is a good way
+to debug.
+
+Also I'm happy to say that the .html file is only 500K, so it's still small enough to be reasonable to load in the browser really quickly.
+
+Ahah! I definitely found a bug with how the `self.manhattan_peak_sprawl_dist` was
+being used by me. I had incorrectly substituted some code to avoid a function call.
+This might work now.

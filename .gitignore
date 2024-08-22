@@ -6,4 +6,5 @@ build/
 sandbox/
 *.json
 *.csv
+*.tsv
 *.ipynb

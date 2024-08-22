@@ -115,4 +115,4 @@ def get_premade_organism_chroms(organism: str) -> list[Chrom]:
             Chrom(organism, "MT", 41),
         ]
     else:
-        raise ValueError(f"Unknown organism: {organism}")
+        raise ValueError(f"Unknown organism: {organism} for premade chromosomes.")

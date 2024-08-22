@@ -23,7 +23,7 @@ def test_good_variant_reqd_only() -> None:
     assert v.ref == "A"
     assert v.alt == "T"
     assert v.pval == 0.001
-    assert v.minor_allele_frequency == 0.5
+    assert v.maf == 0.5
     assert v.effect_size == 0.5
 
 
@@ -46,7 +46,7 @@ def test_good_variant_with_optionals() -> None:
     assert v.ref == "A"
     assert v.alt == "T"
     assert v.pval == 0.001
-    assert v.minor_allele_frequency == 0.5
+    assert v.maf == 0.5
     assert v.effect_size == 0.5
     assert v.alt_allele_freq == 0.5
 

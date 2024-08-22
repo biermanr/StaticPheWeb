@@ -23,7 +23,7 @@ class Variant(BaseModel):  # type: ignore
     pval: float = Field(
         ge=0, le=1, validation_alias=AliasChoices("pval", "p_value", "p_val")
     )
-    minor_allele_frequency: typing.Optional[float] = Field(
+    maf: typing.Optional[float] = Field(
         default=None,
         ge=0,
         le=0.5,

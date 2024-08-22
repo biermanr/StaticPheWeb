@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from . import __version__, parsing, process
+from . import __version__, chromosomes, parsing, process
 
 
 @click.group()
@@ -34,7 +34,8 @@ def build(out_dir, json_file) -> None:
 @click.option("--delim", "-d", default=",", type=str)
 def validate_input(tabular_file, delim) -> None:
     """Validate format of input CSV file, or use --delim to specify other tabular format."""
-    num_lines = sum(1 for _ in parsing.TabularParser(tabular_file, delim))
+    chroms = chromosomes.get_premade_organism_chroms("dog")
+    num_lines = sum(1 for _ in parsing.TabularParser(chroms, tabular_file, delim))
     click.echo(
-        f"File {tabular_file} with {num_lines} successfully parsed, file is valid!"
+        f"File {tabular_file} with {num_lines:,} successfully parsed, file is valid!"
     )
