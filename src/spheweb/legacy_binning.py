@@ -16,13 +16,14 @@ class LegacyBinner(binning.Binner):  # type: ignore
         self._peak_last_chrpos: tuple[str, int] = ("", 0)
         self._peak_pq: MaxPriorityQueue = MaxPriorityQueue()
         self._unbinned_variant_pq: MaxPriorityQueue = MaxPriorityQueue()
-        self._bins: dict[
-            int, Any
-        ] = {}  # like {<chrom>: {<pos // bin_length>: [{chrom, startpos, qvals}]}}
-        self._qval_bin_size = (
-            0.05  # this makes 200 bins for the minimum-allowed y-axis covering 0-10
-        )
-        self._num_significant_in_current_peak = 0  # num variants stronger than manhattan_peak_variant_counting_pval_threshold
+
+        # like {<chrom>: {<pos // bin_length>: [{chrom, startpos, qvals}]}}
+        self._bins: dict[int, Any] = {}
+        # this makes 200 bins for the minimum-allowed y-axis covering 0-10
+        self._qval_bin_size = 0.05
+
+        # num variants stronger than manhattan_peak_variant_counting_pval_threshold
+        self._num_significant_in_current_peak = 0
 
         # TODO
         # NOTE: hardcoding PheWeb `conf` values here
@@ -83,7 +84,7 @@ class LegacyBinner(binning.Binner):  # type: ignore
     def bin(self, parser: parsing.Parser) -> dict[str, Any]:
         """Perform PheWeb binning."""
         for v in parser:
-            v = dict(v)  # convert pydantic model to dict to add previously used fields
+            v = dict(v)  # convert pydantic model to dict to add legacy fields
             self.process_variant(v)
 
         return self.get_result()
@@ -216,22 +217,29 @@ class LegacyBinner(binning.Binner):  # type: ignore
 
     def _rounded(self, qval: float) -> float:
         """Round a q-value to the nearest bin."""
-        # round down to the nearest multiple of `self._qval_bin_size`, then add 1/2 of `self._qval_bin_size` to be in the middle of the bin
         x = qval // self._qval_bin_size * self._qval_bin_size + self._qval_bin_size / 2
-        return round(
-            x, 3
-        )  # trim `0.35000000000000003` to `0.35` for convenience and network request size
+        return round(x, 3)
 
     def _get_qvals_and_qval_extents(
         self, qvals: list[float]
     ) -> tuple[list[float], list[tuple[float, float]]]:
+        """Return a list of q-values and a list of q-value extents.
+
+        I don't really understand what this does.
+        """
         qvals = sorted(self._rounded(qval) for qval in qvals)
         extents = [(qvals[0], qvals[0])]
+
+        # binning qvalues that are within 10% of the qval_bin_size of the current max qval.
+        # values outside of that result in a new bin.
         for q in qvals:
             if q <= extents[-1][1] + self._qval_bin_size * 1.1:
                 extents[-1] = (extents[-1][0], q)
             else:
                 extents.append((q, q))
+
+        # if the extent has the same start and end, then it's a single q-value
+        # otherwise it's a range of q-values
         rv_qvals, rv_qval_extents = [], []
         for start, end in extents:
             if start == end:

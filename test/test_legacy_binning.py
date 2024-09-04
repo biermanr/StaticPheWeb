@@ -8,9 +8,15 @@ from spheweb import process
 
 @pytest.mark.slow  # type: ignore
 def test_generate_legacy_manhattan_data(tmp_path: Path) -> None:
-    """Test generate_legacy_manhattan_data."""
-    # data_file = tmp_path / "test.csv"
-    # process.generate_legacy_manhattan_data(tmp_path / "test.csv")
+    """Test generate_legacy_manhattan_data against a small validated input."""
+    data_file = Path("test/pheno_data.csv")
+    out_file = tmp_path / "manhattan.json"
+    ground_truth = Path("test/pheno_manhattan.json")
+
     process.generate_legacy_manhattan_json(
-        Path("dd_weight_lbs_N-7378.loco.csv"), Path("manhattan.json")
+        data_file,
+        out_file,
     )
+
+    with open(out_file) as f, open(ground_truth) as g:
+        assert f.read() == g.read()

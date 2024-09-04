@@ -597,7 +597,8 @@ steps in order (there are a lot of steps):
 10. `pheweb gather-pvalues-for-each-gene`
     * Took 10 seconds. This gets the best p-values for each gene and writes out `generated-by-pheweb/best-phenos-by-gene.sqlite3`.
 11. `pheweb manhattan`
-    * Took 42 seconds and produced the `generated-by-pheweb/manhattan/Weight.json` file
+    * Took 42 seconds and produced the `generated-by-pheweb/manhattan/Weight.json` file.
+    * Takes as input the `pheno_gz/` files.
 
 
 I reran all these steps and still got a disagreement for the JSON file between
@@ -606,7 +607,7 @@ is different, but additionally the `unbinned_variants` are different with
 PheWeb having 596 unbinned_variants and Spheweb having 1000 unbinned_variants.
 
 
-Aug 22st 2024: Continued Binner Tracing
+Aug 22nd 2024: Continued Binner Tracing
 ---
 Returning to this project after a break. Immediate todo is still to figure out why the
 `unbinned_variants` are different between PheWeb and Spheweb.
@@ -748,3 +749,103 @@ Also I'm happy to say that the .html file is only 500K, so it's still small enou
 Ahah! I definitely found a bug with how the `self.manhattan_peak_sprawl_dist` was
 being used by me. I had incorrectly substituted some code to avoid a function call.
 This might work now.
+
+No, there is still an issue with these two peaks both being recorded in the output.
+Need to follow-up on another day.
+
+
+Sept 3rd 2024: Continued debugging of legacy binning
+---
+Noticing another discrepancy between the PheWeb and Spheweb output where
+the 0-th "variant bin" for the PheWeb output is:
+```python
+{'chrom': '1',
+ 'qvals': [3.05, 3.65, 3.95],
+ 'qval_extents': [[0.05, 2.85], [3.35, 3.45]],
+ 'pos': 1500000}
+```
+
+whereas the Spheweb output is
+```python
+{'chrom': '1',
+ 'qvals': [3.05, 3.95],
+ 'qval_extents': [[0.05, 2.85], [3.35, 3.45], [3.65, 3.75]],
+ 'pos': 1500000}
+```
+
+so it seems like the Spheweb output is missing the 3.65 from `qvals` and somehow
+added it to the `qval_extents`.
+
+I'm rerunning PheWeb to regenerate the output to see if the bug is still present,
+it probably should be since I haven't changed anything in the code, but this is
+just a sanity check. The 11 steps of `pheweb process` need to finish. Will probably
+take around 10 minutes.
+
+I should restrict to just chr10 and rerun both PheWeb and SpheWeb after this to
+get a smaller output to compare.
+
+The outputs are really similar on just chr10, but there are still some differences.
+Looks like the `qval_extents` are still different:
+```python
+#pheweb chr10 variant_bins
+{'chrom': '10',
+ 'qvals': [6.45, 6.65],
+ 'qval_extents': [[0.05, 4.75], [5.05, 6.25], [6.85, 7.85]],
+ 'pos': 1500000}
+```
+
+
+```python
+#spheweb chr10 variant_bins
+{'chrom': '10',
+ 'qvals': [6.45, 6.65],
+ 'qval_extents': [[0.05, 4.85], [5.05, 6.25], [6.85, 7.85]],
+ 'pos': 1500000}
+```
+
+I think there must be differences in the `_get_qvals_and_qval_extents` function.
+No, the code looks identical. I'm going to try debugging with pdb. Ok, using pdb
+was helpful for spheweb, I understand now that the `qval` and `qval_extents` are
+calculated at the end in the `get_result` function which is called once after all
+the variants have been processed. The difference between `qval` and `qval_extents` is
+that `qvals` are the "singular" q-values that can occur when trying to bin the q-values.
+For example, walking through the `for` loop binning the qvalues in the `_get_qvals_and_qval_extents`, this populates the `extents` list to look like:
+```python
+[(0.05, 4.85), (5.05, 6.25), (6.45, 6.45), (6.65, 6.65), (6.85, 7.85)]
+```
+
+This is the result of binning qvalues that are within 10% of the qval_bin_size of the current max qval.
+
+And from this, you can see that `6.45` and `6.65` are the qvals because these are "singular" bins, or "q-values that form their own bin" because they are too far aways from the previous or subsequent q-values. The `qval_extents` are the non-singular ranges.
+
+Adding print-statements to the `pheweb` manhattan.py, I see that the `extents` for the
+same region are:
+```python
+[(0.05, 4.75), (5.05, 6.25), (6.45, 6.45), (6.65, 6.65), (6.85, 7.85)]
+```
+
+so literally the same except for the 4.75 vs. 4.85.
+Let me check the qvals. Ok, the qvals are different for this region, so this is
+likely a result of different variants being added to this bin. So instead I'm going to check the variants that are being added to this bin.
+
+I think this the binning is being done in the `_bin_variant` function, but this
+is called by `_maybe_bin_variant` which is called by `_maybe_peak_variant` if
+priority queue gets full. Actually I'm getting confused. The json file produced by
+pheweb at `manhattan/Weight.json` doesn't have any actual position information, just
+the qvals and qval_extents.
+
+Actually, I'm wondering if the rounding of p_values to generate the `pheno_gz/` files
+by pheweb is causing the slight differences. I reran spheweb on the `pheno_gz/` file
+created by `pheweb` after gunzipping it.
+
+Yes! That fixed the `qval_extents` difference!
+I wonder if it will also fix the differences in the `unbinned_variants`, yes it has!
+Ok, I think this means that the manhattan plots will be the same too! Let me check.
+
+The Manhattan plots are NOT the same, comparing the Broad website `https://broad.io/dogPheweb` vs. the spheweb output, the actual loci are different, but comparing
+the spheweb output to the pheweb output, the loci are the same! Must be some
+difference between the "production" PheWeb and the local PheWeb, but I'm happy now.
+
+I'm going to say that this is a win and the comparison is complete! The legacy
+code will remain as part of the project for a while, and maybe forever, I will include
+a small test file in the tests directory to allow the legacy code to be tested.
