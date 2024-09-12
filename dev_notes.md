@@ -849,3 +849,21 @@ difference between the "production" PheWeb and the local PheWeb, but I'm happy n
 I'm going to say that this is a win and the comparison is complete! The legacy
 code will remain as part of the project for a while, and maybe forever, I will include
 a small test file in the tests directory to allow the legacy code to be tested.
+
+Ok, finished this on Sept 4th finally, pushed the `legacy_binning` to `dev`.
+It was little enough work that I didn't make a new entry here for it.
+
+Noticed, however, that although the generated json files are identical between
+PheWeb and SpheWeb, the tables below the manhattan plots are NOT identical. So
+there must be some logic that is performed in determining which variants are
+shown in the table. Yes, there are actually only 96 variants shown in the table
+for "dog weight" in PheWeb even though there are 596 unbinned variants that are
+used for plotting. Ohh, this is controlled by the `{"peak": true}` field in the
+dictionary of each variant!
+
+This code is in the `populate_streamtable` function in `pheweb/serve/static/pheno.js`.
+
+This was a good thing to learn, the variants listed in the table are only a
+subset of the variants used to create the manhattan plot. I have to decide
+if I want to implement this the same way in SpheWeb, but at least now I
+understand PheWeb better.

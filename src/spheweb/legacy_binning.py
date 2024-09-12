@@ -2,7 +2,8 @@
 
 import heapq
 import math
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any, Optional
 
 from . import binning, parsing
 
@@ -191,7 +192,11 @@ class LegacyBinner(binning.Binner):  # type: ignore
             self._maybe_peak_variant(self._peak_best_variant)
 
         peaks = list(self._peak_pq.pop_all())
-        # for peak in peaks: peak['peak'] = True
+
+        #'peak' = True is used to indicate that this should be listed as peaks in table below manhattan plot
+        for peak in peaks:
+            peak["peak"] = True
+
         unbinned_variants = list(self._unbinned_variant_pq.pop_all())
         unbinned_variants = sorted(
             unbinned_variants + peaks, key=(lambda variant: variant["pval"])
