@@ -867,3 +867,19 @@ This was a good thing to learn, the variants listed in the table are only a
 subset of the variants used to create the manhattan plot. I have to decide
 if I want to implement this the same way in SpheWeb, but at least now I
 understand PheWeb better.
+
+Nov 11th 2024: Returning to the project, made Parser an iterator with __next__
+---
+I was looking through the `test_tabular_parser` tests and tried to rewrite the tests
+to use `next()` instead of `for` loops since I thought that looked cleaner, but
+when I tried, I realized that the `TabularParser` class wasn't an iterator. I needed
+to add the `__next__` method to the class to make it an iterator and change the `__iter__`
+function to return `self`. I'm not 100% sure I did this correctly, but the tests pass and
+the tests now exercise both forms of iteration.
+
+Nov 11th 2024: Adding coverage testing
+---
+The coverage is not currently calculated in the pre-commit hooks, so I'm going to add
+Oh, apparently this is bad form since we want to keep pre-commit hooks fast, and tests
+are usually slow, but I don't see why this would be an issue as long as I mark the slow
+tests and don't use that mark with pre-commit, only with GHA.

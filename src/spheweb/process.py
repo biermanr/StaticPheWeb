@@ -3,7 +3,7 @@
 import importlib.resources
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -23,7 +23,7 @@ def generate_legacy_manhattan_json(
         json.dump(data, json_file)
 
 
-def render_manhattan_plot(out_dir: Path, data: Dict[str, Any]) -> None:
+def render_manhattan_plot(out_dir: Path, data: dict[str, Any]) -> None:
     """Use the HTML template and data to generate a new Manhattan HTML file at out_dir."""
     template_path = importlib.resources.files("spheweb").joinpath("templates")
 

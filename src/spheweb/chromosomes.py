@@ -1,6 +1,10 @@
 """Chromosome classes and functions."""
 
+import functools
+from types import NotImplementedType
 
+
+@functools.total_ordering
 class Chrom:
     """Simple class for representing a chromosome."""
 
@@ -10,7 +14,7 @@ class Chrom:
         self.name = name
         self.order = order
 
-    def __eq__(self, other: object) -> bool:
+    def __eq__(self, other: object) -> bool | NotImplementedType:
         """Compare the chromosome objects for equality."""
         if not isinstance(other, Chrom):
             return NotImplemented
@@ -20,7 +24,7 @@ class Chrom:
 
         return self.name == other.name and self.order == other.order
 
-    def __lt__(self, other: object) -> bool:
+    def __lt__(self, other: object) -> bool | NotImplementedType:
         """Compare the chromosome objects for less-than."""
         if not isinstance(other, Chrom):
             return NotImplemented

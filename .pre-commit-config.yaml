@@ -21,3 +21,11 @@ repos:
       args: [ --fix ]
     - id: ruff-format
       types_or: [ python, pyi, jupyter ]
+- repo: local
+  hooks:
+    - id: pytest-check
+      name: pytest-check
+      entry: pytest --run-slow --cov src --cov-fail-under=50 --cov-report=html
+      language: system
+      pass_filenames: false
+      always_run: true

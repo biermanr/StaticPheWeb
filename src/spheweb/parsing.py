@@ -1,8 +1,8 @@
 """Module for parsing data files into Variant models."""
 
 import csv
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from . import chromosomes, variant
 
@@ -26,7 +26,14 @@ class Parser:
             raise ValueError("Duplicate chromosomes in the list")
         self.chroms = chroms
 
-    def generate_variants(self) -> Iterator[variant.Variant]:  # type: ignore
+        # Initialize the generator of Variant models for __iter__ and __next__
+        self.variants = self.generate_variants()
+        self.chrom_name_order = {c.name: c.order for c in self.chroms}
+        self.prev_chrom_name = self.chroms[0].name
+        self.prev_chrom_order = self.chroms[0].order
+        self.prev_pos = 0
+
+    def generate_variants(self) -> Iterator[variant.Variant]:  # type: ignore[empty-body]
         """Generate an iterator of Variant models.
 
         This method must be implemented by sub-classes.
@@ -34,39 +41,46 @@ class Parser:
         pass
 
     def __iter__(self) -> Iterator[variant.Variant]:
-        """Parse the input data file and return an iterable.
+        """Prepare for iteration.
+
+        Sub-classes should not need to override this method.
+        """
+        return self
+
+    def __next__(self) -> variant.Variant:
+        """Return the next variant.
 
         Ensure that the chromosomes and positions are valid and in order.
         Sub-classes should NOT override this method or risk forgetting
         to validate the chromosomes and positions ordering.
         """
-        # TODO try and move chrom validation to pydantic
-        chrom_name_order = {c.name: c.order for c in self.chroms}
-        prev_chrom_name = self.chroms[0].name
-        prev_chrom_order = self.chroms[0].order
-        prev_pos = 0
-        for v in self.generate_variants():
-            if v.chrom not in chrom_name_order:
-                raise ValueError(
-                    f"Observed chromosome: {v.chrom} not in specified chromosomes {chrom_name_order.keys()}"
-                )
-            if chrom_name_order[v.chrom] < prev_chrom_order:
-                raise ValueError(
-                    f"Invalid chromosome order: {v.chrom} observed after {prev_chrom_name}"
-                )
-            if v.pos < 0:
-                raise ValueError(f"Invalid position: {v.pos}")
-            if prev_chrom_name == v.chrom and prev_pos == v.pos:
-                raise ValueError(f"Duplicate variant position: {v.chrom}:{v.pos}")
-            if prev_chrom_name == v.chrom and prev_pos > v.pos:
-                raise ValueError(
-                    f"Invalid position order: {v.pos} comes after {prev_pos} on {v.chrom}"
-                )
+        try:
+            v = next(self.variants)
+        except StopIteration as exc:
+            raise exc
 
-            prev_chrom_name = v.chrom
-            prev_chrom_order = chrom_name_order[v.chrom]
-            prev_pos = v.pos
-            yield v
+        # TODO try and move chrom validation to pydantic
+        if v.chrom not in self.chrom_name_order:
+            raise ValueError(
+                f"Observed chromosome: {v.chrom} not in specified chromosomes {self.chrom_name_order.keys()}"
+            )
+        if self.chrom_name_order[v.chrom] < self.prev_chrom_order:
+            raise ValueError(
+                f"Invalid chromosome order: {v.chrom} observed after {self.prev_chrom_name}"
+            )
+        if v.pos < 0:
+            raise ValueError(f"Invalid position: {v.pos}")
+        if self.prev_chrom_name == v.chrom and self.prev_pos == v.pos:
+            raise ValueError(f"Duplicate variant position: {v.chrom}:{v.pos}")
+        if self.prev_chrom_name == v.chrom and self.prev_pos > v.pos:
+            raise ValueError(
+                f"Invalid position order: {v.pos} comes after {self.prev_pos} on {v.chrom}"
+            )
+
+        self.prev_chrom_name = v.chrom
+        self.prev_chrom_order = self.chrom_name_order[v.chrom]
+        self.prev_pos = v.pos
+        return v
 
 
 class TabularParser(Parser):

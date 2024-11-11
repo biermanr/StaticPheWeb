@@ -6,7 +6,7 @@ import pytest
 from spheweb import chromosomes, parsing
 
 
-@pytest.fixture  # type: ignore
+@pytest.fixture  # type: ignore[misc]
 def chroms() -> list[chromosomes.Chrom]:
     """Return a list of Chrom objects."""
     return [
@@ -22,23 +22,24 @@ def test_good_csv_parse(tmp_path: Path, chroms: pytest.fixture) -> None:
         "chromosome,position,ref,alt,pval\n" "1,1000,A,T,0.01\n" "2,2000,C,G,0.23\n"
     )
 
-    for i, v in enumerate(parsing.TabularParser(chroms, csv_file)):
-        if i == 0:
-            assert v.chrom == "1"
-            assert v.pos == 1000
-            assert v.ref == "A"
-            assert v.alt == "T"
-            assert v.pval == 0.01
+    p = parsing.TabularParser(chroms, csv_file)
 
-        if i == 1:
-            assert v.chrom == "2"
-            assert v.pos == 2000
-            assert v.ref == "C"
-            assert v.alt == "G"
-            assert v.pval == 0.23
+    v = next(p)
+    assert v.chrom == "1"
+    assert v.pos == 1000
+    assert v.ref == "A"
+    assert v.alt == "T"
+    assert v.pval == 0.01
 
-        if i > 1:
-            raise AssertionError("Too many rows in test.csv")
+    v = next(p)
+    assert v.chrom == "2"
+    assert v.pos == 2000
+    assert v.ref == "C"
+    assert v.alt == "G"
+    assert v.pval == 0.23
+
+    with pytest.raises(StopIteration):
+        next(p)
 
 
 def test_good_tsv_parse(tmp_path: Path, chroms: pytest.fixture) -> None:
@@ -82,7 +83,7 @@ def test_incorrect_chrom(tmp_path: Path, chroms: pytest.fixture) -> None:
         ):  # need to iterate through the generator to raise the error
             pass
 
-    assert "Observed chromosome: 3 not in specified chromosomes" in str(e.value)
+        assert "Observed chromosome: 3 not in specified chromosomes" in str(e.value)
 
 
 def test_incorrect_chrom_order(tmp_path: Path, chroms: pytest.fixture) -> None:
@@ -96,7 +97,7 @@ def test_incorrect_chrom_order(tmp_path: Path, chroms: pytest.fixture) -> None:
         for _ in parsing.TabularParser(chroms, csv_file):
             pass
 
-    assert "Invalid chromosome order: 1 observed after 2" in str(e.value)
+        assert "Invalid chromosome order: 1 observed after 2" in str(e.value)
 
 
 def test_incorrect_pos_order(tmp_path: Path, chroms: pytest.fixture) -> None:
@@ -110,7 +111,7 @@ def test_incorrect_pos_order(tmp_path: Path, chroms: pytest.fixture) -> None:
         for _ in parsing.TabularParser(chroms, csv_file):
             pass
 
-    assert "Invalid position order: 999 comes after 1000 on 1" in str(e.value)
+        assert "Invalid position order: 999 comes after 1000 on 1" in str(e.value)
 
 
 def test_correct_pos_decrease_new_chrom_order(
@@ -122,20 +123,21 @@ def test_correct_pos_decrease_new_chrom_order(
         "chromosome,position,ref,alt,pval\n" "1,1000,A,T,0.01\n" "2,999,C,G,0.23\n"
     )
 
-    for i, v in enumerate(parsing.TabularParser(chroms, csv_file)):
-        if i == 0:
-            assert v.chrom == "1"
-            assert v.pos == 1000
-            assert v.ref == "A"
-            assert v.alt == "T"
-            assert v.pval == 0.01
+    variants = parsing.TabularParser(chroms, csv_file)
 
-        if i == 1:
-            assert v.chrom == "2"
-            assert v.pos == 999
-            assert v.ref == "C"
-            assert v.alt == "G"
-            assert v.pval == 0.23
+    v = next(variants)
+    assert v.chrom == "1"
+    assert v.pos == 1000
+    assert v.ref == "A"
+    assert v.alt == "T"
+    assert v.pval == 0.01
 
-        if i > 1:
-            raise AssertionError("Too many rows in test.csv")
+    v = next(variants)
+    assert v.chrom == "2"
+    assert v.pos == 999
+    assert v.ref == "C"
+    assert v.alt == "G"
+    assert v.pval == 0.23
+
+    with pytest.raises(StopIteration):
+        next(variants)
