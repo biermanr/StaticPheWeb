@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from . import __version__, chromosomes, parsing, process
+from . import __version__, chromosomes, parsing, process, utils
 
 
 @click.group()
@@ -39,3 +39,10 @@ def validate_input(tabular_file, delim) -> None:
     click.echo(
         f"File {tabular_file} with {num_lines:,} successfully parsed, file is valid!"
     )
+
+
+@spheweb.command(hidden=True)
+@click.argument("matrix_tar_gz", type=Path)
+def matrix_to_sqlite(matrix_tar_gz) -> None:
+    """Convert a matrix.tar.gz file to a SQLite database."""
+    utils.convert_tsv_gz_to_normalized_sqlite(matrix_tar_gz)

@@ -882,4 +882,118 @@ Nov 11th 2024: Adding coverage testing
 The coverage is not currently calculated in the pre-commit hooks, so I'm going to add
 Oh, apparently this is bad form since we want to keep pre-commit hooks fast, and tests
 are usually slow, but I don't see why this would be an issue as long as I mark the slow
-tests and don't use that mark with pre-commit, only with GHA.
+tests and don't use that mark with pre-commit, only with GHA. Actually its fine to include
+the "slow" tests for now in the pre-commit hooks, but if they become too slow, I can
+just run them on the github actions (GHA) CI.
+
+Also added tests for the `Chromosome` module and got the coverage up to ~80%.
+Ran into issues with GHA failing to calculate coverage because I wasn't installing the package
+in editable mode. Fixed this.
+
+Learned some interesting things about the NotImplemented comparison behavior in Python.
+Specifically, it seems like even if NotImplemented is returned from __eq__, the comparison
+of a custom class and a built-in class will return False. Strangely __lt__, __gt__, etc.
+will return NotImplemented. Oh, also learned about the functools total_ordering decorator
+which lets you define only two of the comparison methods and it will fill in the rest!
+
+Finally, I realized that coverage HTML report is exactly what I'm attempting to make spheweb
+produce!
+
+
+Mar 11th 2025: Naively converting matrix.tar.gz to sqlite
+---
+The `matrix.tar.gz` for DAP is 11GB and is required for the `Variant` endpoint in the API.
+It has the format:
+```
+#chrom  pos    ref  alt  rsids  nearest_genes  pval@1-3-Methylhistidine  beta@1-3-Methylhistidine  ...
+1       5753   G    A    ENPP1  0.98           -0.0012                   0.43                      ...
+1       13961  G    T    ENPP1  0.18           -0.24                     0.017                     ...
+1       14118  G    C    ENPP1  0.7            0.058                     0.024                     ...
+1       14132  A    C    ENPP1  0.64           0.06                      0.035                     ...
+1       14926  C    T    ENPP1  0.31           -0.23                     0.011                     ...
+1       14935  A    T    ENPP1  0.63           0.091                     0.014                     ...
+1       14990  G    A    ENPP1  0.82           0.025                     0.052                     ...
+1       15016  G    A    ENPP1  0.81           -0.017                    0.13                      ...
+1       15091  A    T    ENPP1  0.53           0.094                     0.025                     ...
+```
+
+My question was whether or not converting this to a sqlite database would result in a smaller file.
+I created a new branch `sqlite` to run a small test with just the first 2000 lines of the matrix file.
+Used pandas `to_sql` in to convert the matrix to sqlite in the `utils.py` module and saw that the
+resulting sqlite database was actually ~9x larger than the original matrix file:
+
+- 2.2M    subset_matrix.tsv.gz
+-  17M    subset_matrix.tsv.sqlite
+- 2.7M    subset_matrix.tsv.sqlite.gz
+-  10M    subset_matrix.tsv
+
+I'm realizing this is because the sqlite file is not compressed while
+the original matrix file is. I checked this by gzipping the sqlite
+which brought it back down to near the size of the original matrix file.
+
+Actually even the unzipped TSV file is smaller than the sqlite file.
+I find this surprising since sqlite is binary and should be more efficient.
+
+I tried to melt the table to long-form to see if that would save space:
+```
+#chrom  pos     ref alt rsids   nearest_genes   phenotype           pval    beta    maf
+1       5753    G   A   NaN     ENPP1           1-3-Methylhistidine 0.980   -0.0012 0.430
+1       13961   G   T   NaN     ENPP1           1-3-Methylhistidine 0.180   -0.2400 0.017
+1       14118   G   C   NaN     ENPP1           1-3-Methylhistidine 0.700   0.0580  0.024
+1       14132   A   C   NaN     ENPP1           1-3-Methylhistidine 0.640   0.0600  0.035
+1       14926   C   T   NaN     ENPP1           1-3-Methylhistidine 0.310   -0.2300 0.011
+...	    ...	    ...	...	...	    ...	            ...	                ...	    ...	    ...
+```
+
+
+But it's way worse, which I guess makes sense since the chrom/pos/ref/alt
+are repeated for each phenotype in the long-form now.
+
+- 48M    subset_matrix.tsv.sqlite
+
+I should be able to normalize the database to save space by creating separate
+tables for the variants (chrom, pos, ref, alt, rsids), annotations (genes, etc), the
+phenotypes (phenotype), and the measurements (pval, beta, maf).
+
+```mermaid
+erDiagram
+    Variant {
+        int uid PK
+        string chrom
+        int pos
+        char ref
+        char alt
+        string[] rsids
+    }
+    Measurement {
+        int Variant PK,FK
+        int Phenotype PK,FK
+        float pval
+        float beta
+        float maf
+    }
+    Phenotype {
+        string Name PK
+        int Num-SNPs
+        int Num-Cases
+        int Num-Controls
+    }
+    Annotation {
+        string chrom
+        int start
+        int end
+        string name
+    }
+    Variant }|--|| Measurement : ""
+    Phenotype }|--|| Measurement : ""
+```
+
+In this way I can normalize the database and save space. I'm going to try and implement
+this in the `utils.py` module as a new function `convert_matrix_to_sqlite_normalized`.
+
+Ok I have the normalized database working, at least as a start,
+but it's still larger than the original matrix file:
+- 25M    subset_matrix.tsv.normalized.sqlite
+
+I even included a call to "VACUUM" in the `convert_matrix_to_sqlite_normalized` function
+to try and shrink the database, but it didn't help.
