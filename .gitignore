@@ -12,3 +12,5 @@ uv.lock
 *.swp
 *.sqlite
 *.gz
+*.png
+*.pdf

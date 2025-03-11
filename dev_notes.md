@@ -997,3 +997,15 @@ but it's still larger than the original matrix file:
 
 I even included a call to "VACUUM" in the `convert_matrix_to_sqlite_normalized` function
 to try and shrink the database, but it didn't help.
+
+Mar 11th 2025: Experimenting with fpdf2 to create a PDF report
+---
+I'm going to try and use the fpdf2 library to create a PDF report for Spheweb
+as an alternative to the HTML report. My concern is whether or not the PDF
+report will be too large, but I think it's worth trying.
+
+Key features I want to include in the PDF report:
+- Title page with the name of the phenotype that link to subsequent pages
+- Multiple pages of Manhattan plots with a table of the top variants below each plot
+
+To get started, I'm going to build the PDF from a subset of the matrix.tsv.gz file.
