@@ -1074,4 +1074,11 @@ Next steps are to:
 - Add a table of the top variants below each Manhattan plot
 
 The first step I'm going to do is to add an "overall" table of contents to the PDF.
-???
+
+Ok, that was easy to do, I've just added an "About" page to the PDF so I could have the overall table of contents
+link to both the "About" and "Phenotype table" pages. I think this is a good start.
+
+I also expanded on the "Phenotype table" to include a header and additional columns, which are currently just
+placeholders. With this, the first two todo's are complete.
+
+The next step is to create the `render_manhattan_plot_SVG` function in `process.py` to create the SVG image from the matrix file.

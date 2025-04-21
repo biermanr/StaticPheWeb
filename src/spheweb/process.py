@@ -3,11 +3,12 @@
 import importlib.resources
 import json
 import pathlib
+import time
 from pathlib import Path
 from typing import Any
 
+import fpdf
 import pandas as pd
-from fpdf import FPDF
 from jinja2 import Environment, FileSystemLoader
 
 from . import chromosomes, legacy_binning, parsing
@@ -70,21 +71,128 @@ def render_pdf(matrix_tsv_gz_path: pathlib.Path) -> pathlib.Path:
 
     pdf_path = matrix_tsv_gz_path.with_suffix(".pdf")
 
-    pdf = FPDF()
+    #############################
+    #                           #
+    # Overall table of contents #
+    #                           #
+    #############################
+    pdf = fpdf.FPDF()
     pdf.set_font("helvetica", size=14)
+
     pdf.add_page()
     table_of_contents = pdf.add_link()
+    pdf.set_link(table_of_contents, page=pdf.page_no())
 
-    # Pre-specify the links to the pages which will be bound to pages later
+    pdf.cell(
+        text="Static PheWeb PDF", new_x=fpdf.enums.XPos.LEFT, new_y=fpdf.enums.YPos.NEXT
+    )
+
+    date = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    pdf.cell(
+        text=f"This was created on {date}",
+        new_x=fpdf.enums.XPos.LEFT,
+        new_y=fpdf.enums.YPos.NEXT,
+    )
+
+    # Specify the link to the important contents
+    about = pdf.add_link()
+    phenotypes_table = pdf.add_link()
+
+    pdf.ln(10)
+    pdf.cell(
+        text="Table of Contents", new_x=fpdf.enums.XPos.LEFT, new_y=fpdf.enums.YPos.NEXT
+    )
+    pdf.cell(
+        text="1. About",
+        new_x=fpdf.enums.XPos.LEFT,
+        new_y=fpdf.enums.YPos.NEXT,
+        link=about,
+        border=True,
+    )
+    pdf.cell(
+        text="2. Phenotypes",
+        new_x=fpdf.enums.XPos.LEFT,
+        new_y=fpdf.enums.YPos.NEXT,
+        link=phenotypes_table,
+        border=True,
+    )
+
+    #############################
+    #                           #
+    #           About           #
+    #                           #
+    #############################
+    pdf.add_page()
+    pdf.set_link(about, page=pdf.page_no())
+    pdf.cell(
+        text="About this PDF", new_x=fpdf.enums.XPos.LEFT, new_y=fpdf.enums.YPos.NEXT
+    )
+    pdf.cell(
+        text="This is a static PheWeb that has a subset of the full functionality of Pheweb",
+        new_x=fpdf.enums.XPos.LEFT,
+        new_y=fpdf.enums.YPos.NEXT,
+    )
+    pdf.cell(
+        text="Return to the table of contents",
+        new_x=fpdf.enums.XPos.LEFT,
+        new_y=fpdf.enums.YPos.NEXT,
+        link=table_of_contents,
+        border=True,
+    )
+
+    #############################
+    #                           #
+    #      Phenotypes table     #
+    #                           #
+    #############################
+    pdf.add_page()
+    pdf.set_link(phenotypes_table, page=pdf.page_no())
+    pdf.set_font("helvetica", size=10)
+
+    pdf.cell(
+        text="List of Phenotypes",
+        new_x=fpdf.enums.XPos.LEFT,
+        new_y=fpdf.enums.YPos.NEXT,
+    )
+    pdf.cell(
+        text="Return to the table of contents",
+        new_x=fpdf.enums.XPos.LEFT,
+        new_y=fpdf.enums.YPos.NEXT,
+        link=table_of_contents,
+        border=True,
+    )
+
+    # Pre-specify the links to the manhattan plot pages which will be bound to pages later
     manhattan_links = {phenotype: pdf.add_link() for phenotype in phenotypes}
 
     # Table of phenotypes
+    pdf.set_font("helvetica", size=8)
     with pdf.table() as table:
+        head = table.row()
+        head.cell("Category")
+        head.cell("Phenotype name")
+        head.cell("Top variant")
+        head.cell("P-value")
+        head.cell("MAF")
+        head.cell("Neareast Gene")
+
         for phenotype in phenotypes:
             row = table.row()
-            row.cell(phenotype, link=manhattan_links[phenotype])
+            row.cell("Uncategorized")  # NOTE
+            pdf.set_text_color(0, 0, 255)
+            row.cell(text=phenotype, link=manhattan_links[phenotype])
+            pdf.set_text_color(0, 0, 0)
+            row.cell("rsid???")  # NOTE
+            row.cell("1.0")  # NOTE
+            row.cell("0.5")  # NOTE
+            row.cell("Gene???")  # NOTE
 
-    # Pages of Manhattan plots (TODO just repeating the same PNG for now)
+    #############################
+    #                           #
+    #      Phenotypes pages     #
+    #                           #
+    #############################
+    # TODO just repeating the same PNG for now
     for phenotype in phenotypes:
         pdf.add_page()
         pdf.set_link(manhattan_links[phenotype], page=pdf.page_no())
