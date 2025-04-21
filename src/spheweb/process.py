@@ -17,7 +17,10 @@ from . import chromosomes, legacy_binning, parsing
 def generate_legacy_manhattan_json(
     data_file: Path, json_out: Path, delim: str = ","
 ) -> None:
-    """Generate data for a Manhattan plot from a data file using legacy PheWeb binning."""
+    """Generate data for a Manhattan plot from a data file using legacy PheWeb binning.
+
+    Outputs a JSON file with the binned data.
+    """
     binner = legacy_binning.LegacyBinner()
     chroms = chromosomes.get_premade_organism_chroms("dog")
     parser = parsing.TabularParser(chroms, data_file, delim)
@@ -38,6 +41,32 @@ def render_manhattan_plot(out_dir: Path, data: dict[str, Any]) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     with out_dir.joinpath("manhattan.html").open("w") as out_file:
         out_file.write(rendered)
+
+
+def render_manhattan_plot_SVG_from_legacy_JSON_data(
+    out_dir: Path, data: dict[str, Any], phenotype: str
+) -> None:
+    """Create an SVG file for a Manhattan plot using legacy JSON data.
+
+    Goal is to create a .svg file using plotly from the JSON structured data from the legacy
+    binning approach which has the following form:
+
+    {
+        "variant_bins": [
+            {"chrom": "1", "qvals": [3.05, 3.65, 3.95], "qval_extents": [[0.05, 2.85], [3.35, 3.45]], "pos": 1500000},
+            {"chrom": "1", "qvals": [3.85], "qval_extents": [[0.05, 3.35]], "pos": 4500000},
+            ...
+        ],
+        "unbinned_variants": [
+            {"chrom": "15", "pos": 41521885, "ref": "T", "alt": "C", "pval": 9e-50, "maf": 0.48, ... },
+            {"chrom": "15", "pos": 41521682, "ref": "A", "alt": "G", "pval": 1.1e-49, "maf": 0.48, ... },
+            ...
+        ]
+    }
+    """
+    # svg_path = out_dir.joinpath(f"{phenotype}.svg")
+
+    pass
 
 
 def render_pdf(matrix_tsv_gz_path: pathlib.Path) -> pathlib.Path:

@@ -1082,3 +1082,44 @@ I also expanded on the "Phenotype table" to include a header and additional colu
 placeholders. With this, the first two todo's are complete.
 
 The next step is to create the `render_manhattan_plot_SVG` function in `process.py` to create the SVG image from the matrix file.
+
+Ok, I've started looking through the code to try and understand what needs to be done to create SVGs and I think it's quite a lot.
+Currently the only Manhattan plot able to be generated is the legacy HTML plot which uses d3.js to create the plot.
+I don't want to have to use d3.js to create the SVG, so I was thinking of using plotly instead.
+
+However, right now the legacy binning uses JSON data in a format that I likely won't want to use.
+I guess as an intermediate step, I should create SVGs from the current legacy JSON datastructure.
+
+Ok, to summarize, I think the next step is to create
+a function `render_manhattan_plot_SVG` that takes the legacy JSON data from
+`legacy_binning.py` and creates an SVG image with plotly or matplotlib instead of d3.js.
+
+Here's the legacy data flow
+```mermaid
+graph LR;
+    matrix.tsv.gz -->| TabularParser + LegacyBinning | data.json
+    data.json -->| render_manhattan_plot + d3.js | index.html
+```
+
+Here's how we'll add the functionality to make SVGs
+```mermaid
+graph LR;
+    matrix.tsv.gz -->| TabularParser + LegacyBinning | data.json
+    data.json -->| render_manhattan_plot + d3.js | index.html
+    data.json -->| legacy_manhattan_plot_SVG + plotly/matplotlib | plot.svg
+```
+
+And ultimately I want to have a non-legacy binning and a new
+intermediate data format (or maybe none at all)
+
+```mermaid
+graph LR;
+    matrix.tsv.gz -->| TabularParser + LegacyBinning | data.json
+    data.json -->| render_manhattan_plot + d3.js | index.html
+
+    files.mlma? --> | TabularParser + SphewebBinning | intermediate?
+    intermediate? -->| render_manhattan_plot_SVG + plotly/matplotlib | plot.svg
+    data.json -->| legacy_manhattan_plot_SVG + plotly/matplotlib | plot.svg
+```
+
+And then I can remove the unnecessary steps in the legacy pipeline later

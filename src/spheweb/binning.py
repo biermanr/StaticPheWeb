@@ -1,4 +1,4 @@
-"""Classes to bin SNPs from TSV/CSV/MLMA files into windows for plotting."""
+"""Classes to bin SNPs from TSV/CSV/MLMA files into windows for Manhattan style plotting."""
 
 from abc import ABC, abstractmethod
 from typing import Any
@@ -11,7 +11,10 @@ class Binner(ABC):
 
     @abstractmethod
     def bin(self, parser: parsing.Parser) -> dict[str, Any]:
-        """Bin the input data file."""
+        """Bin the input data file.
+
+        This method should be implemented by subclasses to perform the actual binning.
+        """
         pass
 
 
@@ -24,4 +27,7 @@ class WindowBinner(Binner):
 
     def bin(self, parser: parsing.Parser) -> dict[str, Any]:
         """Perform the binning of SNPs into windows."""
+        # for variant in parser:
+        #    pass
+
         return {"TODO": "implement"}

@@ -37,6 +37,8 @@ class Parser:
         """Generate an iterator of Variant models.
 
         This method must be implemented by sub-classes.
+        It should yield Variant models one at a time.
+        This method gets called by __next__ via self.variants.
         """
         pass
 
