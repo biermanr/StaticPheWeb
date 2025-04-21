@@ -1030,7 +1030,48 @@ link = pdf.add_link(page=1)
 pdf.cell(text="Internal link to first page", border=1, link=link)
 ```
 
-But I won't know ahead of time what the page number is, so I need to use the `page_number()` method?
+Apr 21st 2025: Internal linking in fpdf2
+---
+Same problem as before, where I won't know ahead of time what the page number is, so I need to use the `page_number()` method?
 
 Well, actually, can I create the PDF non-linearly? What I mean is can I create some pages,
 then go back and edit the prior pages?
+
+No, it turns out the answer is to use the `add_link` method to create named links to pages
+that don't exist yet, and save these links in a dictionary like:
+```python
+manhattan_links = {phenotype: pdf.add_link() for phenotype in phenotypes}
+```
+
+Then I can use the `set_link` method to set the current page to the link, again without having the page
+exist yet:
+```python
+with pdf.table() as table:
+    for phenotype in phenotypes:
+        row = table.row()
+        row.cell(phenotype, link=manhattan_links[phenotype])
+```
+
+Then finally, later I can use the `set_link` method to set the current page to the link:
+```python
+for phenotype in phenotypes:
+    pdf.add_page()
+    pdf.set_link(manhattan_links[phenotype], page=pdf.page_no())
+    pdf.cell(text="Link to first page", link=table_of_contents)
+    pdf.cell(200, 10, f"Manhattan plot for {phenotype}")
+    pdf.image("example_manhattan.png", x=10, y=20, w=180)
+```
+
+Got this working to create a PDF that can be jumped around inside, but it's currently very bare-bones
+and it's using the same placeholder PNG Manhattan plot image for every phenotype.
+
+Next steps are to:
+- Add a table of contents to go to the different views such as "phenotype", "variant", and "region"
+    - We'll just have "phenotype" actually working at this point
+- Expand the table of contents to go to the different manhattan plots to have "best variant" and other columns
+- Create a "render_manhattan_plot_SVG" function in `process.py` to create the SVG image from the matrix file
+- Use the `render_manhattan_plot_SVG` function to create the SVG image for each phenotype
+- Add a table of the top variants below each Manhattan plot
+
+The first step I'm going to do is to add an "overall" table of contents to the PDF.
+???

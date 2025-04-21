@@ -52,4 +52,4 @@ def matrix_to_sqlite(matrix_tar_gz) -> None:
 @click.argument("matrix_tar_gz", type=Path)
 def matrix_to_pdf(matrix_tar_gz) -> None:
     """Convert a matrix.tar.gz file to a PDF report."""
-    utils.write_pdf_from_matrix(matrix_tar_gz)
+    process.render_pdf(matrix_tar_gz)

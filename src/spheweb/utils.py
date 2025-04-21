@@ -4,7 +4,6 @@ import pathlib
 import sqlite3
 
 import pandas as pd
-from fpdf import FPDF
 
 
 def convert_tsv_gz_to_sqlite(data_path: pathlib.Path) -> pathlib.Path:
@@ -203,61 +202,3 @@ def convert_tsv_gz_to_normalized_sqlite(data_path: pathlib.Path) -> pathlib.Path
     conn.close()
 
     return sqlite_path
-
-
-def write_pdf_from_matrix(data_path: pathlib.Path) -> pathlib.Path:
-    """Write a PDF file from a Matrix TSV GZ file.
-
-    Args:
-    ----
-        data_path: Path to the TSV file with columns:
-            - #chrom
-            - pos
-            - ref
-            - alt
-            - rsids
-            - nearest_genes
-            - pval@1-3-Methylhistidine
-            - beta@1-3-Methylhistidine
-            - maf@1-3-Methylhistidine
-            - pval@creatine
-            - beta@creatine
-            - maf@creatine
-            - ...
-
-    Returns:
-    -------
-        Path to the PDF file.
-
-    """
-    df = pd.read_csv(data_path, sep="\t")
-    unique_phenotypes = set(c.split("@")[1] for c in df.columns if "@" in c)
-    phenotypes = sorted(unique_phenotypes)
-
-    pdf_path = data_path.with_suffix(".pdf")
-
-    pdf = FPDF()
-    pdf.set_font("helvetica", size=14)
-    pdf.add_page()
-    table_of_contents = pdf.add_link()
-
-    # Pre-specify the links to the pages which will be bound to pages later
-    manhattan_links = {phenotype: pdf.add_link() for phenotype in phenotypes}
-
-    # Table of phenotypes
-    with pdf.table() as table:
-        for phenotype in phenotypes:
-            row = table.row()
-            row.cell(phenotype, link=manhattan_links[phenotype])
-
-    # Pages of Manhattan plots (TODO just repeating the same PNG for now)
-    for phenotype in phenotypes:
-        pdf.add_page()
-        pdf.set_link(manhattan_links[phenotype], page=pdf.page_no())
-        pdf.cell(text="Link to first page", link=table_of_contents)
-        pdf.cell(200, 10, f"Manhattan plot for {phenotype}")
-        pdf.image("example_manhattan.png", x=10, y=20, w=180)
-
-    pdf.output(pdf_path)
-
-    return pdf_path
