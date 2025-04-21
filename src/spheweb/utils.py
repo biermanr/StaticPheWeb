@@ -231,28 +231,32 @@ def write_pdf_from_matrix(data_path: pathlib.Path) -> pathlib.Path:
 
     """
     df = pd.read_csv(data_path, sep="\t")
-    phenotypes = set(c.split("@")[1] for c in df.columns if "@" in c)
+    unique_phenotypes = set(c.split("@")[1] for c in df.columns if "@" in c)
+    phenotypes = sorted(unique_phenotypes)
 
     pdf_path = data_path.with_suffix(".pdf")
 
     pdf = FPDF()
     pdf.set_font("helvetica", size=14)
-    # Table of phenotypes
     pdf.add_page()
+    table_of_contents = pdf.add_link()
+
+    # Pre-specify the links to the pages which will be bound to pages later
+    manhattan_links = {phenotype: pdf.add_link() for phenotype in phenotypes}
+
+    # Table of phenotypes
     with pdf.table() as table:
         for phenotype in phenotypes:
             row = table.row()
-            row.cell(phenotype)
+            row.cell(phenotype, link=manhattan_links[phenotype])
 
     # Pages of Manhattan plots (TODO just repeating the same PNG for now)
     for phenotype in phenotypes:
         pdf.add_page()
-        pdf.cell(200, 10, f"Manhattan plot for {phenotype}", ln=True)
+        pdf.set_link(manhattan_links[phenotype], page=pdf.page_no())
+        pdf.cell(text="Link to first page", link=table_of_contents)
+        pdf.cell(200, 10, f"Manhattan plot for {phenotype}")
         pdf.image("example_manhattan.png", x=10, y=20, w=180)
-
-    # TODO figure out how to add links
-    link = pdf.add_link(page=1)
-    pdf.cell(text="Internal link to first page", border=1, link=link)
 
     pdf.output(pdf_path)
 

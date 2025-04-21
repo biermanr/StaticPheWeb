@@ -1009,3 +1009,28 @@ Key features I want to include in the PDF report:
 - Multiple pages of Manhattan plots with a table of the top variants below each plot
 
 To get started, I'm going to build the PDF from a subset of the matrix.tsv.gz file.
+
+I've succeeded in making a mock PDF with 300 pages of the same manhattan plot.
+This PDF is only 228K, but I think this is misleading because it's just a single image repeated.
+Also the image is currently a PNG, but ideally I would like to use a vector image format like SVG or PDF.
+Yes, SVG's are allowed: https://py-pdf.github.io/fpdf2/SVG.html
+
+Apr 18th 2025: Returning to fpdf2 experiments to figure out internal linking
+---
+Last month I was able to create a PDF with a single manhattan plot repeated 300 times
+from the `matrix.tsv.gz` file by creating a temporary command which is hardcoded to use a manhattan plot PNG:
+`spheweb matrix-to-pdf subset_matrix.tsv.gz`
+
+I'll keep using the hardcoded PNG because I want to figure out internal linking.
+Specifically I want to be able to link from the table of contents to the correct manhattan plot.
+Looking at the fpdf2 documentation, it looks like I can use the `add_link` method to create a link, and use it with "cell" as in:
+
+```python
+link = pdf.add_link(page=1)
+pdf.cell(text="Internal link to first page", border=1, link=link)
+```
+
+But I won't know ahead of time what the page number is, so I need to use the `page_number()` method?
+
+Well, actually, can I create the PDF non-linearly? What I mean is can I create some pages,
+then go back and edit the prior pages?
