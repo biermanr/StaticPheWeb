@@ -1157,3 +1157,19 @@ I realized though, that an issue was going to be creating a "global position" fo
 on different chromosomes, for example chromosome 2 needs to start at the end of chromosome 1, etc.
 
 I already have a Chromosome class, but it didn't have a length property, so I'm adding that as as side-project first
+
+Ok, I added the length property to the Chromosome class, and then got a very basic manhattan plot working with plotly,
+but I ran into errors trying to save it to SVG, something about a deprecation warning. So I switched to matplotlib for now
+
+I now have the save SVG getting generated for each phenotype, since I only have one "legacy JSON" data file right now.
+This has worked through the test_pdf, but it's really slow (taking almost and hour) to generate all 30 SVGs, and the total size
+is getting large. The test has 30 fake phenotypes, which takes up ~30MB. This is too large, and I think the SVGs are too large.
+I should be able to shrink them by plotting fewer points and maybe plotting boxes for background bins instead of points.
+
+I'm now trying to run the small example with 300 phenotypes, which will probably take too long:
+```bash
+spheweb matrix-to-sqlite subset_matrix.tsv
+```
+
+Yeah, it stalled out at ~20 SVGs.
+I'm going to temporarily switch back to using the same PNG for each phenotype manhattan plot
