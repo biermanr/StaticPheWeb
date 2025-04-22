@@ -22,7 +22,7 @@ def generate_legacy_manhattan_json(
     Outputs a JSON file with the binned data.
     """
     binner = legacy_binning.LegacyBinner()
-    chroms = chromosomes.get_premade_organism_chroms("dog")
+    chroms = chromosomes.get_premade_assembly_chroms("canfam4")
     parser = parsing.TabularParser(chroms, data_file, delim)
     data = binner.bin(parser)
 

@@ -10,8 +10,8 @@ from spheweb import chromosomes, parsing
 def chroms() -> list[chromosomes.Chrom]:
     """Return a list of Chrom objects."""
     return [
-        chromosomes.Chrom(organism="test", name="1", order=1),
-        chromosomes.Chrom(organism="test", name="2", order=2),
+        chromosomes.Chrom(assembly="test", name="1", order=1, length=8000),
+        chromosomes.Chrom(assembly="test", name="2", order=2, length=7000),
     ]
 
 

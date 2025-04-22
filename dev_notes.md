@@ -1097,14 +1097,14 @@ a function `render_manhattan_plot_SVG` that takes the legacy JSON data from
 Here's the legacy data flow
 ```mermaid
 graph LR;
-    matrix.tsv.gz -->| TabularParser + LegacyBinning | data.json
+    pheno.csv -->| TabularParser + LegacyBinning | data.json
     data.json -->| render_manhattan_plot + d3.js | index.html
 ```
 
 Here's how we'll add the functionality to make SVGs
 ```mermaid
 graph LR;
-    matrix.tsv.gz -->| TabularParser + LegacyBinning | data.json
+    pheno.csv -->| TabularParser + LegacyBinning | data.json
     data.json -->| render_manhattan_plot + d3.js | index.html
     data.json -->| legacy_manhattan_plot_SVG + plotly/matplotlib | plot.svg
 ```
@@ -1114,7 +1114,7 @@ intermediate data format (or maybe none at all)
 
 ```mermaid
 graph LR;
-    matrix.tsv.gz -->| TabularParser + LegacyBinning | data.json
+    pheno.csv -->| TabularParser + LegacyBinning | data.json
     data.json -->| render_manhattan_plot + d3.js | index.html
 
     files.mlma? --> | TabularParser + SphewebBinning | intermediate?
@@ -1123,3 +1123,37 @@ graph LR;
 ```
 
 And then I can remove the unnecessary steps in the legacy pipeline later
+
+Apr 22nd: Plotly Manhattan plot SVG
+---
+Creating plotly scatterplot from the JSON data created by the legacy binner.
+It was easy to create a scatterplot with plotly, and also easy to create a pandas
+dataframe from the JSON data, specifically using the "unbinned_variants" which are the
+stand-out variants.
+
+
+```python
+import plotly.express as px
+import pandas as pd
+import numpy as np
+import json
+
+json_path = "manhattan_from_gz.json"
+with open(json_path, "r") as f:
+    data = json.load(f)
+
+df = pd.DataFrame(data["unbinned_variants"])
+df["log10_pval"] = np.log10(df["pval"])
+
+# Use chromosome length to determine the position of each variant in "gobal position"
+
+
+fig = px.scatter(df, y="log10_pval", x="pos")
+fig.update_traces(marker_size=10)
+fig.show()
+```
+
+I realized though, that an issue was going to be creating a "global position" for the variants
+on different chromosomes, for example chromosome 2 needs to start at the end of chromosome 1, etc.
+
+I already have a Chromosome class, but it didn't have a length property, so I'm adding that as as side-project first
