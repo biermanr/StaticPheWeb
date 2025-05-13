@@ -1173,3 +1173,77 @@ spheweb matrix-to-sqlite subset_matrix.tsv
 
 Yeah, it stalled out at ~20 SVGs.
 I'm going to temporarily switch back to using the same PNG for each phenotype manhattan plot
+
+Apr 23rd 2025: Improving and shrinking SVG size
+---
+Realized yesterday that I wasn't calling `plt.close()` after saving the SVG,
+so this was causing each consecutive plot to be added to the previous one which
+was really balooning the size of the SVGs. I fixed this and now all the SVGs are the same size
+and running the pytest with 30 phenotypes completes in 1 minute instead of 1 hour.
+
+Now I'm trying to re-run the example with 300 phenotypes:
+```bash
+spheweb matrix-to-sqlite subset_matrix.tsv
+```
+
+This succeeded and the generated `subset_matrix.pdf` is "only" 5.6M which is ok-ish.
+
+Ok, I've completed all the tasks I set on Apr 21st except for:
+- Add a table of the top variants below each Manhattan plot
+
+I think my next steps should be to create a synthetic data generator so that I can
+stop using adhoc local files. Being able to generate synthetic data will
+also allow me to test ways to shrink SVG size while maintaining the quality of the plot.
+- There's already a `matrix_gz_path` pytest fixture in `tests/conftest.py` that creates a synthetic matrix file
+  which is how the 30 phenotype test was created. Right now this creates random rows
+  - It would be good to lift this functionality into a module so I can use it on the command line and in tests
+- In PheWeb, the actual manhattan plots get generated from parsed TSV files, so I should
+  make a "legacy parsed data" generator that can be used as input to the legacy binning
+  - I already have a `test/pheno_data.csv` file that is used for testing the legacy binning
+  - But it would be better to have a generator rather than a static file
+  - This would allow me to create multiple "legacy parsed data" files with different characteristics
+
+May 13th 2025: Creating synthetic "mlma" data generators
+---
+
+The main input data for PheWeb are "GWAS summary statistics files" which, according to PheWeb need to
+have the following characteristics:
+
+1. It needs a header row.
+2. Columns can be delimited by tabs, spaces, or commas.
+3. It needs a column for the reference allele
+   (which must always match the bases on the reference genome that you specified with hg_build_number)\
+   and a column for the alternate allele. If you have a MARKER_ID column like
+   1:234_C/G, that's okay too. If you have an allele1 and allele2, and sometimes
+   one or the other is the reference, then you'll need to modify your files.
+4. It can be gzipped if you want.
+5. Variants must be sorted by chromosome and position, with chromosomes in the order [1-22,X,Y,MT].
+
+And the header row MUST have the following columns
+
+column description	| name	| other allowed column names	| allowed values
+--- | --- | --- | ---
+chromosome	| chrom	| #chrom, chr	| 1-22, X, Y, M, MT, chr1, etc
+position	| pos	| beg, begin, bp	| integer
+reference allele	| ref	| reference	| must match reference genome
+alternate allele	| alt	| alternate	| anything
+p-value	| pval	| pvalue, p, p.value	| number in [0,1]
+
+I've already created small versions of these files for testing the parsing utilities like:
+
+```python
+"""Test CSVParser with a TSV."""
+tsv_file = tmp_path / "test.tsv"
+tsv_file.write_text(
+    "chromosome\tposition\tref\talt\tpval\n"
+    "1\t1000\tA\tT\t0.01\n"
+    "2\t2000\tC\tG\t0.23\n"
+)
+```
+
+which is good, but I also want/need tools to produce "entire" GWAS summary statistics files
+so that I can do larger scale tests and timing tests for parsing and processing realistically
+sized files.
+
+I think I want to put this functionality in `utils.py` and then maybe reference it in conftest.py.
+This is because I want to make it available as a CLI sub-command to generate one of these files.

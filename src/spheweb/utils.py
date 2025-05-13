@@ -1,9 +1,117 @@
 """Utility functions for PheWeb."""
 
+import gzip
 import pathlib
 import sqlite3
 
 import pandas as pd
+
+from . import chromosomes, variant
+
+
+def create_phenotype_GWAS_file(
+    chroms: list[chromosomes.Chrom],
+    num_variants: int,
+    output_path: pathlib.Path,
+    sep: str = ",",
+) -> None:
+    """Create a synthetic phenotype GWAS file.
+
+    Create a new file with the following columns:
+    - chrom
+    - pos
+    - ref
+    - alt
+    - pval
+    - maf
+    - alt_allele_freq
+    - effect_size
+    """
+    header = variant.Variant.model_fields.keys()
+
+    with open(output_path, "w") as f:
+        f.write(sep.join(header) + "\n")
+        for chrom in chroms:
+            for i in range(num_variants):
+                v = variant.Variant(
+                    chrom=chrom.name,
+                    pos=i,
+                    ref="A",
+                    alt="T",
+                    pval=0.01,
+                    maf=0.1,
+                    alt_allele_freq=0.2,
+                    effect_size=0.5,
+                )
+
+                # write the variant to the file, ensuring the order of the columns
+                # matches the header
+                f.write(sep.join(str(getattr(v, field)) for field in header) + "\n")
+
+
+def create_matrix_gz_file(
+    chroms: list[chromosomes.Chrom],
+    num_phenotypes: int,
+    num_variants: int,
+    output_path: pathlib.Path,
+    sep: str = "\t",
+) -> None:
+    """Create a synthetic matrix file.
+
+    Create a new file with the following columns:
+    - #chrom
+    - pos
+    - ref
+    - alt
+    - rsids
+    - nearest_genes
+    - pval@phenotype1
+    - beta@phenotype1
+    - maf@phenotype1
+    - pval@phenotype2
+    - beta@phenotype2
+    - maf@phenotype2
+    - ...
+    - pval@phenotypeN
+    - beta@phenotypeN
+    - maf@phenotypeN
+    """
+    header = [
+        "#chrom",
+        "pos",
+        "ref",
+        "alt",
+        "rsids",
+        "nearest_genes",
+    ]
+
+    for i in range(num_phenotypes):
+        header.append(f"pval@phenotype{i}")
+        header.append(f"beta@phenotype{i}")
+        header.append(f"maf@phenotype{i}")
+
+    with gzip.open(output_path, "wt") as f:
+        f.write(sep.join(header) + "\n")
+        for chrom in chroms:
+            for i in range(num_variants):
+                for _ in range(num_phenotypes):
+                    out_line = (
+                        sep.join(
+                            [
+                                chrom.name,
+                                str(i),
+                                "A",
+                                "T",
+                                f"rs{chrom.name}_{i}",
+                                f"gene{chrom.name}_{i}",
+                                str(0.01),
+                                str(0.5),
+                                str(0.1),
+                            ]
+                        )
+                        + "\n"
+                    )
+                    f.write(out_line)
 
 
 def convert_tsv_gz_to_sqlite(data_path: pathlib.Path) -> pathlib.Path:

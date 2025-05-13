@@ -90,6 +90,7 @@ def render_manhattan_plot_SVG_from_legacy_JSON_data(
     plt.ylabel("-log10(p-value)")
     plt.title(f"Manhattan Plot for {phenotype}")
     plt.savefig(out_dir.joinpath(f"{phenotype}.svg"), format="svg")
+    plt.close()
 
 
 def render_pdf(matrix_tsv_gz_path: pathlib.Path) -> pathlib.Path:
@@ -246,20 +247,20 @@ def render_pdf(matrix_tsv_gz_path: pathlib.Path) -> pathlib.Path:
     #############################
     for phenotype in phenotypes:
         pdf.add_page()
-        pdf.set_link(manhattan_links[phenotype], page=pdf.page_no())
+        pdf.set_link(manhattan_links[phenotype])
         pdf.cell(text="Link to first page", link=table_of_contents)
         pdf.cell(200, 10, f"Manhattan plot for {phenotype}")
 
         # TODO hacky way to generate SVGs from legacy JSON data for now
-        # json_data_path = "manhattan_from_gz.json"  # NOTE HARDCODED!!
-        # with open(json_data_path) as json_file:
-        #    data = json.load(json_file)
-        #
-        # render_manhattan_plot_SVG_from_legacy_JSON_data(
-        #    out_dir=pathlib.Path("svgs"), data=data, phenotype=phenotype
-        # )
-        # pdf.image(f"svgs/{phenotype}.svg", x=10, y=20, w=180)
-        pdf.image("example_manhattan.png", x=10, y=20, w=180)
+        json_data_path = "manhattan_from_gz.json"  # NOTE HARDCODED!!
+        with open(json_data_path) as json_file:
+            data = json.load(json_file)
+
+        render_manhattan_plot_SVG_from_legacy_JSON_data(
+            out_dir=pathlib.Path("svgs"), data=data, phenotype=phenotype
+        )
+        pdf.image(f"svgs/{phenotype}.svg", x=10, y=20, w=180)
+        # pdf.image("example_manhattan.png", x=10, y=20, w=180)
 
     pdf.output(pdf_path)
 

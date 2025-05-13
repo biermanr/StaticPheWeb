@@ -24,6 +24,9 @@ class Parser:
             raise ValueError("No chromosomes provided")
         if len(chroms) != len(set(chroms)):
             raise ValueError("Duplicate chromosomes in the list")
+        if sorted(chroms) != chroms:
+            raise ValueError("Chromosomes are not in order")
+
         self.chroms = chroms
 
         # Initialize the generator of Variant models for __iter__ and __next__
@@ -31,12 +34,12 @@ class Parser:
         self.chrom_name_order = {c.name: c.order for c in self.chroms}
         self.prev_chrom_name = self.chroms[0].name
         self.prev_chrom_order = self.chroms[0].order
-        self.prev_pos = 0
+        self.prev_pos = -1
 
     def generate_variants(self) -> Iterator[variant.Variant]:  # type: ignore[empty-body]
         """Generate an iterator of Variant models.
 
-        This method must be implemented by sub-classes.
+        This method MUST be implemented by sub-classes.
         It should yield Variant models one at a time.
         This method gets called by __next__ via self.variants.
         """

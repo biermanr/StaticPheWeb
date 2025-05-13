@@ -1,4 +1,4 @@
-"""Test legacy binning functions."""
+"""Test legacy functions."""
 
 from pathlib import Path
 
@@ -6,7 +6,7 @@ import pytest
 from spheweb import process
 
 
-@pytest.mark.slow  # type: ignore
+@pytest.mark.slow  # type: ignore[misc]
 def test_generate_legacy_manhattan_data(tmp_path: Path) -> None:
     """Test generate_legacy_manhattan_data against a small validated input."""
     data_file = Path("test/pheno_data.csv")

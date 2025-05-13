@@ -88,10 +88,9 @@ def test_create_chroms_from_lengths_dict() -> None:
 @pytest.mark.parametrize("assembly", ["hg19", "hg38", "grch37", "grch38", "canfam4"])  # type: ignore[misc]
 def test_premade_chromosomes(assembly: str) -> None:
     """Test that the premade chromosomes are correct."""
-    human_chroms = chromosomes.get_premade_assembly_chroms(assembly)
-    for chrom in human_chroms:
+    chroms = chromosomes.get_premade_assembly_chroms(assembly)
+    for chrom in chroms:
         assert isinstance(chrom, chromosomes.Chrom)
-        assert chrom.assembly == assembly
 
 
 def test_missing_premade_chromosomes() -> None:

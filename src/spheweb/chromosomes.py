@@ -84,10 +84,13 @@ def create_chroms_from_lengths_dict(
     return chroms
 
 
-def get_premade_assembly_chroms(assembly: str) -> list[Chrom]:
-    """Get a list of Chrom objects for the specified organism."""
-    if assembly.lower() in {"hg19", "grch37"}:
-        chrom_lengths = {
+# TODO refactor, maybe make a class for "RefGenome" or something
+# TODO add a function to get the chromosome lengths from UCSC or Ensembl
+# TODO add a function to get the chromosome lengths from a file
+premade_refs = {
+    "hg19": create_chroms_from_lengths_dict(
+        "hg19",
+        {
             "1": 249_250_621,
             "2": 243_199_373,
             "3": 198_022_430,
@@ -113,12 +116,11 @@ def get_premade_assembly_chroms(assembly: str) -> list[Chrom]:
             "X": 155_270_560,
             "Y": 59_373_566,
             "MT": 16_569,
-        }
-
-        return create_chroms_from_lengths_dict(assembly, chrom_lengths)
-
-    elif assembly.lower() in {"hg38", "grch38"}:
-        chrom_lengths = {
+        },
+    ),
+    "hg38": create_chroms_from_lengths_dict(
+        "hg38",
+        {
             "1": 248_956_422,
             "2": 242_193_529,
             "3": 198_295_559,
@@ -144,12 +146,11 @@ def get_premade_assembly_chroms(assembly: str) -> list[Chrom]:
             "X": 156_040_895,
             "Y": 57_227_415,
             "MT": 16_569,
-        }
-
-        return create_chroms_from_lengths_dict(assembly, chrom_lengths)
-
-    elif assembly.lower() == "canfam4":
-        chrom_lengths = {
+        },
+    ),
+    "canFam4": create_chroms_from_lengths_dict(
+        "canFam4",
+        {
             "1": 122_014_068,
             "2": 82_037_489,
             "3": 94_329_250,
@@ -190,9 +191,21 @@ def get_premade_assembly_chroms(assembly: str) -> list[Chrom]:
             "38": 23_973_277,
             "X": 108_808_365,
             "MT": 16_735,
-        }
+        },
+    ),
+}
 
-        return create_chroms_from_lengths_dict(assembly, chrom_lengths)
+
+def get_premade_assembly_chroms(assembly: str) -> list[Chrom]:
+    """Get a list of Chrom objects for the specified organism."""
+    if assembly.lower() in {"hg19", "grch37"}:
+        return premade_refs["hg19"]
+
+    elif assembly.lower() in {"hg38", "grch38"}:
+        return premade_refs["hg38"]
+
+    elif assembly.lower() == "canfam4":
+        return premade_refs["canFam4"]
 
     else:
         raise ValueError(f"Unknown assembly: {assembly} for premade chromosomes.")

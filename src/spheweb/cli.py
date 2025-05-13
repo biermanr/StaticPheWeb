@@ -30,15 +30,65 @@ def build(out_dir, json_file) -> None:
 
 
 @spheweb.command()
+def list_ref_genomes() -> None:
+    """List available reference genomes."""
+    click.echo("Available reference genomes:")
+    for ref in chromosomes.premade_refs.keys():
+        click.echo(f"- {ref}")
+
+
+@spheweb.command()
 @click.argument("tabular_file", type=Path)
+@click.option(
+    "--ref",
+    "-f",
+    type=str,
+    default="canFam4",
+    required=True,
+    help="Chromosome assembly to use such as canFam4",
+)
+@click.option(
+    "--ref",
+    "-r",
+    type=str,
+    help="Chromosome assembly to use, such as hg19",
+    required=True,
+)
 @click.option("--delim", "-d", default=",", type=str)
-def validate_input(tabular_file, delim) -> None:
-    """Validate format of input CSV file, or use --delim to specify other tabular format."""
-    chroms = chromosomes.get_premade_organism_chroms("dog")
+def validate_input(tabular_file, ref, delim) -> None:
+    """Validate format of tabular format GWAS data file."""
+    chroms = chromosomes.get_premade_assembly_chroms(ref)
     num_lines = sum(1 for _ in parsing.TabularParser(chroms, tabular_file, delim))
     click.echo(
         f"File {tabular_file} with {num_lines:,} successfully parsed, file is valid!"
     )
+
+
+@spheweb.command()
+@click.option(
+    "--ref",
+    type=str,
+    required=True,
+    help="Reference genome, such as hg19, grch38, or canFam4.",
+)
+@click.option(
+    "--output",
+    type=Path,
+    required=True,
+    help="Output file path for the synthetic data.",
+)
+def synthetic_gwas(ref, output) -> None:
+    """Create a synthetic GWAS data file for a single phenotype."""
+    try:
+        chroms = chromosomes.get_premade_assembly_chroms(ref)
+    except ValueError as e:
+        click.echo(f"Error: {e}")
+        click.Abort()
+
+    num_variants = 100
+    utils.create_phenotype_GWAS_file(chroms, num_variants, output, sep="\t")
+
+    click.echo(f"Synthetic data created at {output}")
 
 
 @spheweb.command(hidden=True)
