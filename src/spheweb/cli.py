@@ -41,14 +41,6 @@ def list_ref_genomes() -> None:
 @click.argument("tabular_file", type=Path)
 @click.option(
     "--ref",
-    "-f",
-    type=str,
-    default="canFam4",
-    required=True,
-    help="Chromosome assembly to use such as canFam4",
-)
-@click.option(
-    "--ref",
     "-r",
     type=str,
     help="Chromosome assembly to use, such as hg19",

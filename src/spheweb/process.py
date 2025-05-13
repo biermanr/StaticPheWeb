@@ -66,6 +66,9 @@ def render_manhattan_plot_SVG_from_legacy_JSON_data(
         ]
     }
     """
+    # TODO this is a hacky way to generate SVGs from legacy JSON data
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     # TODO only using the unbinned variants for now, these are the significant variants
     # TODO need to add the binned variants to the plot, which are the backgrounds
     df = pd.DataFrame(data["unbinned_variants"])
@@ -291,7 +294,6 @@ def render_pdf(matrix_tsv_gz_path: pathlib.Path) -> pathlib.Path:
             out_dir=pathlib.Path("svgs"), data=data, phenotype=phenotype
         )
         pdf.image(f"svgs/{phenotype}.svg", x=10, y=20, w=180)
-        # pdf.image("example_manhattan.png", x=10, y=20, w=180)
 
     pdf.output(pdf_path)
 
