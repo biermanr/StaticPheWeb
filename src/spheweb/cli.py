@@ -92,6 +92,13 @@ def synthetic_gwas(ref, output) -> None:
 
 
 @spheweb.command(hidden=True)
+@click.argument("phenotype_gwas", type=Path)
+def svg_manhattan(phenotype_gwas) -> None:
+    """Create a Manhattan plot SVG from a phenotype GWAS file."""
+    pass
+
+
+@spheweb.command(hidden=True)
 @click.argument("matrix_tar_gz", type=Path)
 def matrix_to_sqlite(matrix_tar_gz) -> None:
     """Convert a matrix.tar.gz file to a SQLite database."""

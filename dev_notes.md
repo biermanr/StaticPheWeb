@@ -1247,3 +1247,16 @@ sized files.
 
 I think I want to put this functionality in `utils.py` and then maybe reference it in conftest.py.
 This is because I want to make it available as a CLI sub-command to generate one of these files.
+
+Ok, I've made a first-pass that generates really basic synthetic files that all have the same exact
+data for different SNPs! Even this took a while because I wanted to keep test coverage > 80% and
+I did a fair amount of refactoring as well as making this functionality available at the CLI.
+
+Next steps are:
+- Create INTERESTING synthetic tabular data files for Manhattan plots
+- Write Manhattan plotting code, maybe using `drawsvg2`?, keeping file size in mind
+    - Might require first processing of phenotype mlma files with Binning
+    - Or directly create plot from the mlma file?
+    - Maybe output to PNG instead of SVG? Run tests
+    - Highlight significant loci/regions since PDF doesn't have hover-utility
+- Speedup tests, starting to get slow
