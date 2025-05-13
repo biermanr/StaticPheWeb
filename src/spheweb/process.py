@@ -252,9 +252,40 @@ def render_pdf(matrix_tsv_gz_path: pathlib.Path) -> pathlib.Path:
         pdf.cell(200, 10, f"Manhattan plot for {phenotype}")
 
         # TODO hacky way to generate SVGs from legacy JSON data for now
-        json_data_path = "manhattan_from_gz.json"  # NOTE HARDCODED!!
-        with open(json_data_path) as json_file:
-            data = json.load(json_file)
+        data = {
+            "variant_bins": [
+                {
+                    "chrom": "1",
+                    "qvals": [3.05, 3.65, 3.95],
+                    "qval_extents": [[0.05, 2.85], [3.35, 3.45]],
+                    "pos": 1500000,
+                },
+                {
+                    "chrom": "1",
+                    "qvals": [3.85],
+                    "qval_extents": [[0.05, 3.35]],
+                    "pos": 4500000,
+                },
+            ],
+            "unbinned_variants": [
+                {
+                    "chrom": "15",
+                    "pos": 41521885,
+                    "ref": "T",
+                    "alt": "C",
+                    "pval": 9e-50,
+                    "maf": 0.48,
+                },
+                {
+                    "chrom": "15",
+                    "pos": 41521682,
+                    "ref": "A",
+                    "alt": "G",
+                    "pval": 1.1e-49,
+                    "maf": 0.48,
+                },
+            ],
+        }
 
         render_manhattan_plot_SVG_from_legacy_JSON_data(
             out_dir=pathlib.Path("svgs"), data=data, phenotype=phenotype
