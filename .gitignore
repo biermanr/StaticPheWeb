@@ -13,5 +13,6 @@ uv.lock
 *.sqlite
 *.gz
 *.png
+!dev_notes_images/*.png
 *.svg
 *.pdf

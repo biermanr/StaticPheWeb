@@ -1260,3 +1260,96 @@ Next steps are:
     - Maybe output to PNG instead of SVG? Run tests
     - Highlight significant loci/regions since PDF doesn't have hover-utility
 - Speedup tests, starting to get slow
+
+July 8th 2025: Improve SVG Manhattan plotting code
+---
+
+Currently there is a `render_manhattan_plot` function in `process.py` that uses
+the d3 javascript library with the `manhattan.html` jinja2 template to create a .html
+file with the manhattan plot and the data embedded.
+
+There is a good description of the current state of manhattan plotting
+from the prior note on `Apr 21st` which also includes nice flowcharts.
+
+I just wanted to take a step back and think about why I'd want to have SVG
+output for the manhattan plot, rather than embedded HTML. I think the main reason
+is that I want to be able to generate a PDF report with the manhattan plots. Also
+the embedded HTML's might require a lot of space. For example the example `manhattan.html`
+I created is 164K, which is too large if I want to have 1000 phenotypes.
+The SVGs are currently only 88K, but look worse than the d3 plots.
+A downside of the SVGs is that they don't easily allow for interactivity like the d3
+HTML approach such as hovering over points to see the variant information.
+I do not know if this is possible with SVGs loaded in a browser.
+
+Currently `render_manhattan_plot_SVG_from_legacy_JSON_data` in `process.py` is
+using the legacy JSON data from `legacy_binning.py` to create a manhattan plot SVG.
+The current approach uses matplotlib to create the SVG, but is currently only using
+the "unbinned_variants" data, which is a subset of the variants that have significant p-values.
+
+For interactive testing I have created a hidden command line utility subcommand
+`spheweb svg_manhattan` that takes a path to a legacy JSON file and generates a manhattan plot SVG.
+I'm using it with `spheweb svg-manhattan test_svgs/ dd_weight_lbs.json`. Here's the 88K sized image it generates:
+![dd_weight_lbs.svg](dev_notes_images/20250708_manhattan_no_background.png)
+
+The next step I want to do is add the background bins to the SVG from the `variant_bins` data in the legacy JSON.
+The way that the `manhattan.html` d3 code does this is by creating a "background" layer of rectangles that represent the bins:
+
+```javascript
+bins.selectAll('circle.binned_variant_line')
+    .data(_.property('qval_extents'))
+    .enter()
+    .append('line')
+    .attr('class', 'binned_variant_line')
+    .attr('x1', function (d, i) {
+        var parent_i = +this.parentNode.getAttribute('data-index');
+        return variant_bins[parent_i].x;
+    })
+    .attr('x2', function (d, i) {
+        const parent_i = +this.parentNode.getAttribute('data-index');
+        return variant_bins[parent_i].x;
+    })
+    .attr('y1', function (d) { return y_scale(d[0]); })
+    .attr('y2', function (d) { return y_scale(d[1]); })
+    .style('stroke', function (d, i) {
+        var parent_i = +this.parentNode.getAttribute('data-index');
+        return variant_bins[parent_i].color;
+    })
+    .style('stroke-width', 4.6)
+    .style('stroke-linecap', 'round');
+```
+
+The code uses d3's `line` to make rectangles with the `x1`, `x2`, `y1`, and `y2` attributes.
+
+Here's what the normal d3 manhattan plot looks like with the background bins:
+![](dev_notes_images/20250708_d3_manhattan_with_background_rects.png)
+
+And here's what the SVG looks like without the background bins by commenting out the d3 code above:
+![](dev_notes_images/20250708_d3_manhattan_no_background_rects.png)
+
+The HTML file produced in either case is 264K, because whether or not we plot the background bins,
+the d3 code and embedded data is still the same. I'm similarly not expecting the SVGs to get larger
+when I add the background bins.
+
+One other note is that the d3 code also creates d3 `circle` elements for the binned variants:
+```javascript
+                bins.selectAll('circle.binned_variant_point')
+                    .data(_.property('qvals'))
+                    .enter()
+                    .append('circle')
+                    .attr('class', 'binned_variant_point')
+                    .attr('cx', function (d, i) {
+                        var parent_i = +this.parentNode.getAttribute('data-index');
+                        return variant_bins[parent_i].x;
+                    })
+                    .attr('cy', function (qval) {
+                        return y_scale(qval);
+                    })
+                    .attr('r', 2.3)
+                    .style('fill', function (d, i) {
+                        var parent_i = +this.parentNode.getAttribute('data-index');
+                        return variant_bins[parent_i].color;
+                    });
+```
+
+I've tried turning this on and off and I see only minor differences in the plot:
+![](dev_notes_images/20250708_d3_manhattan_with_background_without_binned_variant_points.png)

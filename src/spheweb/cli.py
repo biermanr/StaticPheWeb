@@ -84,10 +84,21 @@ def synthetic_gwas(ref, output) -> None:
 
 
 @spheweb.command(hidden=True)
-@click.argument("phenotype_gwas", type=Path)
-def svg_manhattan(phenotype_gwas) -> None:
-    """Create a Manhattan plot SVG from a phenotype GWAS file."""
-    pass
+@click.argument("out_dir", type=Path)
+@click.argument("json_file", type=Path)
+def svg_manhattan(out_dir, json_file) -> None:
+    """Create a Manhattan plot SVG from legacy JSON data."""
+    # Create an pheweb.html file which contains the HTML/CSS/JS/DATA for the pheweb
+    # visualization using jinja2 with a template
+
+    with open(json_file) as f:
+        data = json.load(f)
+
+    process.render_manhattan_plot_SVG_from_legacy_JSON_data(
+        out_dir,
+        data,
+        "test_phenotype",
+    )
 
 
 @spheweb.command(hidden=True)
