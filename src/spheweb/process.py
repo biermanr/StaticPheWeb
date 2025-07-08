@@ -76,21 +76,68 @@ def render_manhattan_plot_SVG_from_legacy_JSON_data(
 
     # Use chromosome length to determine the position of each variant in "gobal position"
     dog_chroms = chromosomes.get_premade_assembly_chroms("canFam4")  # NOTE HARD CODED!
+    chrom_colors = {
+        0: "#7878ba",
+        1: "#004242",
+    }
+    chrom_order = {chrom.name: i for i, chrom in enumerate(dog_chroms)}
+
     chrom_offsets = {}
     running_offset = 0
+    chrom_spacing = 50_000_000
     for chrom in dog_chroms:
         chrom_offsets[chrom.name] = running_offset
-        running_offset += chrom.length
+        running_offset += chrom.length + chrom_spacing
 
     df["global_pos_offset"] = df["chrom"].map(chrom_offsets)
     df["global_pos"] = df["pos"] + df["global_pos_offset"]
 
+    plt.figure(figsize=(24, 3))
     plt.scatter(
         df["global_pos"],
         df["-log10_pval"],
+        c=df["chrom"].map(chrom_order).mod(2).map(chrom_colors),
+        s=0.5,
     )
-    plt.xlabel("Chromosome Position")
+
+    # Add rectangles for the binned variants
+    for bin_data in data["variant_bins"]:
+        chrom = bin_data["chrom"]
+        pos = bin_data["pos"]
+        qval_extents = bin_data["qval_extents"]
+
+        # Calculate the global position for the bin
+        global_pos = pos + chrom_offsets[chrom]
+
+        # Draw rectangles for each binned variants with the qval extents
+        for min_qval, max_qval in qval_extents:
+            plt.gca().add_patch(
+                plt.Rectangle(
+                    (global_pos - 0.5, min_qval),
+                    1,
+                    max_qval - min_qval,
+                    color=chrom_colors[chrom_order[chrom] % 2],
+                    alpha=0.5,
+                    zorder=0,
+                )
+            )
+
+    plt.axhline(y=-np.log10(5e-8), color="grey", linestyle="--")
+
+    # Adjust the x-ticks to show chromosome positions
+    xticks = []
+    for chrom in dog_chroms:
+        start_pos = chrom_offsets[chrom.name]
+        end_pos = start_pos + chrom.length
+        xticks.append((start_pos + end_pos) / 2)
+
+    plt.xticks(xticks, [chrom.name for chrom in dog_chroms])
+
+    # Adjust y-limits to start at 0
+    plt.ylim(bottom=0)
+
     plt.ylabel("-log10(p-value)")
+
     plt.title(f"Manhattan Plot for {phenotype}")
     plt.savefig(out_dir.joinpath(f"{phenotype}.svg"), format="svg")
     plt.close()

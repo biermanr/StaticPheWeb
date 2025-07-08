@@ -383,7 +383,6 @@
                         d.color = color_by_chrom(d.chrom);
                     });
 
-                /*
                 bins.selectAll('circle.binned_variant_point')
                     .data(_.property('qvals'))
                     .enter()
@@ -401,7 +400,6 @@
                         var parent_i = +this.parentNode.getAttribute('data-index');
                         return variant_bins[parent_i].color;
                     });
-                */
 
                 bins.selectAll('circle.binned_variant_line')
                     .data(_.property('qval_extents'))

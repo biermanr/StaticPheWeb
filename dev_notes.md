@@ -1261,7 +1261,7 @@ Next steps are:
     - Highlight significant loci/regions since PDF doesn't have hover-utility
 - Speedup tests, starting to get slow
 
-July 8th 2025: Improve SVG Manhattan plotting code
+July 8th 2025: Investigating d3 Manhattan plotting code
 ---
 
 Currently there is a `render_manhattan_plot` function in `process.py` that uses
@@ -1271,28 +1271,10 @@ file with the manhattan plot and the data embedded.
 There is a good description of the current state of manhattan plotting
 from the prior note on `Apr 21st` which also includes nice flowcharts.
 
-I just wanted to take a step back and think about why I'd want to have SVG
-output for the manhattan plot, rather than embedded HTML. I think the main reason
-is that I want to be able to generate a PDF report with the manhattan plots. Also
-the embedded HTML's might require a lot of space. For example the example `manhattan.html`
-I created is 164K, which is too large if I want to have 1000 phenotypes.
-The SVGs are currently only 88K, but look worse than the d3 plots.
-A downside of the SVGs is that they don't easily allow for interactivity like the d3
-HTML approach such as hovering over points to see the variant information.
-I do not know if this is possible with SVGs loaded in a browser.
-
-Currently `render_manhattan_plot_SVG_from_legacy_JSON_data` in `process.py` is
-using the legacy JSON data from `legacy_binning.py` to create a manhattan plot SVG.
-The current approach uses matplotlib to create the SVG, but is currently only using
-the "unbinned_variants" data, which is a subset of the variants that have significant p-values.
-
-For interactive testing I have created a hidden command line utility subcommand
-`spheweb svg_manhattan` that takes a path to a legacy JSON file and generates a manhattan plot SVG.
-I'm using it with `spheweb svg-manhattan test_svgs/ dd_weight_lbs.json`. Here's the 88K sized image it generates:
-![dd_weight_lbs.svg](dev_notes_images/20250708_manhattan_no_background.png)
-
-The next step I want to do is add the background bins to the SVG from the `variant_bins` data in the legacy JSON.
-The way that the `manhattan.html` d3 code does this is by creating a "background" layer of rectangles that represent the bins:
+I thought I had a novel idea to plot background shapes instead of individual points
+for the insignificant `variant_bins` data in the legacy JSON, but it turns out that
+the d3 code already does this. The way that the `manhattan.html` d3 code does
+this is by creating a "background" layer of rectangles that represent the bins:
 
 ```javascript
 bins.selectAll('circle.binned_variant_line')
@@ -1319,6 +1301,12 @@ bins.selectAll('circle.binned_variant_line')
 ```
 
 The code uses d3's `line` to make rectangles with the `x1`, `x2`, `y1`, and `y2` attributes.
+The data used here is the `qval_extents` from the `variant_bins` data, which is a list of pairs
+of q-values such as `[[0.05, 2.85], [3.35, 3.45]]`. These are used for the `y1` and `y2` attributes
+since a q-value is the y-axis of the manhattan plot, -log10(p-value) in this case.
+
+Strangely the `x1` and `x2` attributes are both set to the same value, which is the x-coordinate of the bin,
+which is calculated from the `variant_bins` data which ultimately comes from the `pos` key of the variant_bins.
 
 Here's what the normal d3 manhattan plot looks like with the background bins:
 ![](dev_notes_images/20250708_d3_manhattan_with_background_rects.png)
@@ -1326,7 +1314,7 @@ Here's what the normal d3 manhattan plot looks like with the background bins:
 And here's what the SVG looks like without the background bins by commenting out the d3 code above:
 ![](dev_notes_images/20250708_d3_manhattan_no_background_rects.png)
 
-The HTML file produced in either case is 264K, because whether or not we plot the background bins,
+The HTML file produced in either case is 164K, because whether or not we plot the background bins,
 the d3 code and embedded data is still the same. I'm similarly not expecting the SVGs to get larger
 when I add the background bins.
 
@@ -1353,3 +1341,169 @@ One other note is that the d3 code also creates d3 `circle` elements for the bin
 
 I've tried turning this on and off and I see only minor differences in the plot:
 ![](dev_notes_images/20250708_d3_manhattan_with_background_without_binned_variant_points.png)
+
+Oh wait, I had misunderstood the d3 `line` code. I thought it was drawing large background rectangles
+to cover the entire insignificant regions, but it's actually drawing small lines for each set of grouped
+variants, which may be significant! I noticed this as I wrote the SVG code to do the same thing.
+
+July 8th 2025: Attempting to decrease d3 data-embedded Manhattan plot html files
+---
+
+I'm still open to the idea of using the d3.js library to create the manhattan plots,
+but unlike standard pheweb, I want to embed the data in the HTML file so that it can be
+run as a static HTML file, without needing a web server.
+
+Currently at ~164K, the HTML file is too large to be practical for sharing with others,
+especially if I want to generate 1000 phenotypes. The `dd_weight_lbs.json` file is 164K
+and makes up the vast majority of the size of the `manhattan.html` file when embedded.
+
+I should be able to reduce the size of the JSON by using a different data structure.
+Currently the data takes the form of a list of dictionaries, where each dictionary
+represents a binned or unbinned variant and all of the associated data:
+```json
+{
+    "variant_bins": [
+        {
+            "chrom": "1",
+            "qvals": [3.05, 3.65, 3.95],
+            "qval_extents": [[0.05, 2.85], [3.35, 3.45]],
+            "pos": 1500000
+        },
+        ...
+    ],
+    "unbinned_variants": [
+        {
+            "chrom": "15",
+            "pos": 41521885,
+            "ref": "T",
+            "alt": "C",
+            "rsid": "",
+            "nearest_genes": ["IGF1"],
+            "pval": 9e-50,
+            "beta": -0.15,
+            "maf": 0.48,
+            "num_significant_in_peak": 290,
+            "peak": true
+        },
+        ...
+    ]
+}
+```
+
+This results in a lot of repeated keys like "chrom", "pos", "ref", "alt", etc.
+I should be able to reduce the size of the JSON by using a different data structure,
+such as a dictionary of lists, where the keys are the column names and the values
+are lists of values for each column.
+
+```json
+{
+    "variant_bins": {
+        "chrom": ["1", "1", "1", ...],
+        "qvals": [[3.05, 3.65, 3.95], [2.05, 2.65, 2.95], ...],
+        "qval_extents": [[0.05, 2.85], [3.35, 3.45], ...],
+        "pos": [1500000, 1600000, ...]
+    },
+    "unbinned_variants": {
+        "chrom": ["15", "15", ...],
+        "pos": [41521885, 41521890, ...],
+        "ref": ["T", "C", ...],
+        "alt": ["C", "G", ...],
+        "rsid": ["", "", ...],
+        "nearest_genes": [["IGF1"], ["IGF2"], ...],
+        "pval": [9e-50, 1e-20, ...],
+        "beta": [-0.15, 0.02, ...],
+        "maf": [0.48, 0.12, ...],
+        "num_significant_in_peak": [290, 150, ...],
+        "peak": [true, false, ...]
+    }
+}
+```
+
+I'm going to test this with a quick python script:
+```python
+import json
+
+json_data_path = "../dd_weight_lbs.json"
+
+with open(json_data_path, 'r') as file:
+    data = json.load(file)
+
+# Convert the data from list of dicts to dict of lists
+data_dict = {}
+for bin_kind,list_of_dict in data.items():
+
+    # Get all possible keys for this type of bin_kind
+    bin_kind_fields = set()
+    for d in list_of_dict:
+        for k in d.keys():
+            bin_kind_fields.add(k)
+
+    # Initialize the data_dict for this bin_kind
+    data_dict[bin_kind] = {field: [] for field in bin_kind_fields}
+
+    # Populate the data_dict for this bin_kind
+    for d in list_of_dict:
+        for field in bin_kind_fields:
+            if field in d:
+                data_dict[bin_kind][field].append(d[field])
+            else:
+                data_dict[bin_kind][field].append(None)
+
+# Write the transformed data to a new JSON file
+output_json_path = "../dd_weight_lbs_transformed.json"
+with open(output_json_path, 'w') as output_file:
+    json.dump(data_dict, output_file, indent=None, separators=(',', ':'))
+```
+
+Unfortunately, I only save ~30K, as the new JSON is 134K instead of 164K.
+
+Another idea is to create all ~1000 of the ~150K manhattan_pheno_X.html files
+but then gzip them, which reduces the size to 32K in this test. Then if you had
+1000 of these, it would be 32M, which is still large, but not too large.
+And when you unzip them it would take a total of 164M of disk space, which isn't too bad.
+
+You'd probably get even better compression if you tar/gzip them together since there
+is repetition in the files as they have the same javascript and HTML.
+
+July 8th 2025: Improve SVG Manhattan plotting code
+---
+
+I just wanted to take a step back and think about why I'd want to have SVG
+output for the manhattan plot, rather than embedded HTML. I think the main reason
+is that I want to be able to generate a PDF report with the manhattan plots. Also
+the embedded HTML's might require a lot of space. For example the example `manhattan.html`
+I created is 164K, which is rather large if I want to have 1000 phenotypes. 164M is too big to email,
+but maybe that's setting the bar too high. Also as discussed earlier, we could gzip down to ~30M maybe.
+The SVGs are currently only 88K which is a similar size. They currently look worse than the d3 plots.
+
+A downside of the SVGs is that they don't easily allow for interactivity like the d3
+HTML approach such as hovering over points to see the variant information.
+I do not know if this is possible with SVGs loaded in a browser.
+
+Currently `render_manhattan_plot_SVG_from_legacy_JSON_data` in `process.py` is
+using the legacy JSON data from `legacy_binning.py` to create a manhattan plot SVG.
+The current approach uses matplotlib to create the SVG, but is only using
+the "unbinned_variants" data, which is a subset of the variants that have significant p-values.
+
+For interactive testing I have created a hidden command line utility subcommand
+`spheweb svg_manhattan` that takes a path to a legacy JSON file and generates a manhattan plot SVG.
+I'm using it with `spheweb svg-manhattan test_svgs/ dd_weight_lbs.json`. Here's the 88K sized image it generates:
+![dd_weight_lbs.svg](dev_notes_images/20250708_manhattan_no_background.png)
+
+I've been able to easily add the background bins to the SVG by using the `patches` module in matplotlib.
+This is similar to the d3 code that draws the background bins, but instead of using `line` elements, it uses many
+small `Rectangle` patches.
+
+Here's what the SVG looks like with the background bins:
+![](dev_notes_images/20250708_svg_manhattan_with_background.png)
+
+I made it very wide, but it otherwise matches the d3 plot, which is good.
+What's not good is that the SVG is now 520K, which is much larger than the 88K SVG without the background bins
+and the 164K d3 data-embedded HTML file.
+
+**Next steps:**
+* Shrink the SVG size by plotting fewer points and Rectangle patches for the background bins.
+* Consider what data format I'd like to use rather than the legacy JSON.
+* Think of an approach where I'd be able to scale up or down the resolution and size of the SVG.
+* Add gene names to the most significant variants in the SVG
+* Highlight significant loci/regions in the SVG since PDF doesn't have hover-utility.
