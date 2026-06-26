@@ -17,6 +17,18 @@ from jinja2 import Environment, FileSystemLoader
 from . import chromosomes, legacy_binning, parsing
 
 
+def bin_gwas_file(
+    data_file: Path, chroms: list[chromosomes.Chrom], delim: str = ","
+) -> dict[str, Any]:
+    """Parse a single GWAS file and return the legacy binned Manhattan payload.
+
+    The returned dict has ``variant_bins`` and ``unbinned_variants`` keys.
+    """
+    binner = legacy_binning.LegacyBinner(chrom_order=[c.name for c in chroms])
+    parser = parsing.TabularParser(chroms, data_file, delim)
+    return binner.bin(parser)
+
+
 def generate_legacy_manhattan_json(
     data_file: Path, json_out: Path, assembly: str, delim: str = ","
 ) -> None:
@@ -25,12 +37,83 @@ def generate_legacy_manhattan_json(
     Outputs a JSON file with the binned data.
     """
     chroms = chromosomes.get_premade_assembly_chroms(assembly)
-    binner = legacy_binning.LegacyBinner(chrom_order=[c.name for c in chroms])
-    parser = parsing.TabularParser(chroms, data_file, delim)
-    data = binner.bin(parser)
+    data = bin_gwas_file(data_file, chroms, delim)
 
     with json_out.open("w") as json_file:
         json.dump(data, json_file)
+
+
+def _copy_site_assets(out_dir: Path) -> None:
+    """Copy shared static assets (index.html, spheweb.js, vendor/) into out_dir.
+
+    Assets that do not yet exist in the package are silently skipped, so this
+    works before and after the shared-renderer assets land.
+    """
+    templates = importlib.resources.files("spheweb").joinpath("templates")
+
+    for name in ("index.html", "spheweb.js"):
+        asset = templates.joinpath(name)
+        if asset.is_file():
+            out_dir.joinpath(name).write_bytes(asset.read_bytes())
+
+    vendor = templates.joinpath("vendor")
+    if vendor.is_dir():
+        out_vendor = out_dir / "vendor"
+        out_vendor.mkdir(exist_ok=True)
+        for entry in vendor.iterdir():
+            if entry.is_file():
+                out_vendor.joinpath(entry.name).write_bytes(entry.read_bytes())
+
+
+def build_static_site(
+    pheno_list_path: Path,
+    assembly: str,
+    out_dir: Path,
+    delim: str = "\t",
+) -> None:
+    """Build a static Manhattan site from a PheWeb-style ``pheno-list.json``.
+
+    For each phenotype, bins its association file to ``out_dir/data/<phenocode>.json``,
+    writes a small ``phenotypes.json`` index (phenocode, phenostring, top hit),
+    and copies the shared site assets. No per-phenotype HTML is produced: the
+    single ``index.html`` fetches each phenotype's data on demand.
+    """
+    out_dir = Path(out_dir)
+    data_dir = out_dir / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    chroms = chromosomes.get_premade_assembly_chroms(assembly)
+
+    with open(pheno_list_path) as f:
+        pheno_list = json.load(f)
+
+    index = []
+    for entry in pheno_list:
+        phenocode = entry["phenocode"]
+        assoc_file = Path(entry["assoc_files"][0])
+        binned = bin_gwas_file(assoc_file, chroms, delim)
+
+        with data_dir.joinpath(f"{phenocode}.json").open("w") as out_file:
+            json.dump(binned, out_file)
+
+        # Top hit = strongest (smallest p-value) variant; the peak variants live
+        # in unbinned_variants. No gene annotation: absent from raw GWAS input.
+        unbinned = binned["unbinned_variants"]
+        top = min(unbinned, key=lambda v: v["pval"]) if unbinned else None
+        index.append(
+            {
+                "phenocode": phenocode,
+                "phenostring": entry.get("phenostring", phenocode),
+                "top_chrom": top["chrom"] if top else None,
+                "top_pos": top["pos"] if top else None,
+                "top_pval": top["pval"] if top else None,
+            }
+        )
+
+    with out_dir.joinpath("phenotypes.json").open("w") as f:
+        json.dump(index, f)
+
+    _copy_site_assets(out_dir)
 
 
 def render_manhattan_plot(out_dir: Path, data: dict[str, Any]) -> None:
@@ -169,6 +252,7 @@ def render_pdf(
             - beta@creatine
             - maf@creatine
             - ...
+        assembly: Chromosome assembly name (e.g. hg19) for the Manhattan plots.
 
     Returns:
     -------
