@@ -1,6 +1,7 @@
 """Test the PDF generation functionality."""
 
 import pytest
+
 from spheweb import process
 
 

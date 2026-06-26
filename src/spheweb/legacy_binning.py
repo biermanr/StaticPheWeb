@@ -8,7 +8,7 @@ from typing import Any, Optional
 from . import binning, parsing
 
 
-class LegacyBinner(binning.Binner):  # type: ignore
+class LegacyBinner(binning.Binner):
     """PheWeb-style binning of SNPs."""
 
     def __init__(self) -> None:
@@ -85,8 +85,8 @@ class LegacyBinner(binning.Binner):  # type: ignore
     def bin(self, parser: parsing.Parser) -> dict[str, Any]:
         """Perform PheWeb binning."""
         for v in parser:
-            v = dict(v)  # convert pydantic model to dict to add legacy fields
-            self.process_variant(v)
+            # convert pydantic model to dict to add legacy fields
+            self.process_variant(dict(v))
 
         return self.get_result()
 

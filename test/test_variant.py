@@ -2,6 +2,7 @@
 
 import pydantic
 import pytest
+
 from spheweb import variant
 
 

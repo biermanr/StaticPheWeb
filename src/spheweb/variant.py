@@ -5,7 +5,7 @@ import typing
 from pydantic import AliasChoices, BaseModel, Field
 
 
-class Variant(BaseModel):  # type: ignore
+class Variant(BaseModel):
     """pydantic model for a variant/SNP."""
 
     chrom: str = Field(

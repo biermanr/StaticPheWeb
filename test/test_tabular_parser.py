@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+
 from spheweb import chromosomes, parsing
 
 
@@ -19,7 +20,7 @@ def test_good_csv_parse(tmp_path: Path, chroms: pytest.fixture) -> None:
     """Test CSVParser."""
     csv_file = tmp_path / "test.csv"
     csv_file.write_text(
-        "chromosome,position,ref,alt,pval\n" "1,1000,A,T,0.01\n" "2,2000,C,G,0.23\n"
+        "chromosome,position,ref,alt,pval\n1,1000,A,T,0.01\n2,2000,C,G,0.23\n"
     )
 
     p = parsing.TabularParser(chroms, csv_file)
@@ -74,7 +75,7 @@ def test_incorrect_chrom(tmp_path: Path, chroms: pytest.fixture) -> None:
     """Test CSVParser with incorrect chromosome."""
     csv_file = tmp_path / "test.csv"
     csv_file.write_text(
-        "chromosome,position,ref,alt,pval\n" "1,1000,A,T,0.01\n" "3,2000,C,G,0.23\n"
+        "chromosome,position,ref,alt,pval\n1,1000,A,T,0.01\n3,2000,C,G,0.23\n"
     )
 
     with pytest.raises(ValueError) as e:
@@ -90,7 +91,7 @@ def test_incorrect_chrom_order(tmp_path: Path, chroms: pytest.fixture) -> None:
     """Test CSVParser with incorrect chromosome order."""
     csv_file = tmp_path / "test.csv"
     csv_file.write_text(
-        "chromosome,position,ref,alt,pval\n" "2,1000,A,T,0.01\n" "1,2000,C,G,0.23\n"
+        "chromosome,position,ref,alt,pval\n2,1000,A,T,0.01\n1,2000,C,G,0.23\n"
     )
 
     with pytest.raises(ValueError) as e:
@@ -104,7 +105,7 @@ def test_incorrect_pos_order(tmp_path: Path, chroms: pytest.fixture) -> None:
     """Test CSVParser with incorrect position order."""
     csv_file = tmp_path / "test.csv"
     csv_file.write_text(
-        "chromosome,position,ref,alt,pval\n" "1,1000,A,T,0.01\n" "1,999,C,G,0.23\n"
+        "chromosome,position,ref,alt,pval\n1,1000,A,T,0.01\n1,999,C,G,0.23\n"
     )
 
     with pytest.raises(ValueError) as e:
@@ -120,7 +121,7 @@ def test_correct_pos_decrease_new_chrom_order(
     """Test CSVParser with correct position decrease and new chrom order."""
     csv_file = tmp_path / "test.csv"
     csv_file.write_text(
-        "chromosome,position,ref,alt,pval\n" "1,1000,A,T,0.01\n" "2,999,C,G,0.23\n"
+        "chromosome,position,ref,alt,pval\n1,1000,A,T,0.01\n2,999,C,G,0.23\n"
     )
 
     variants = parsing.TabularParser(chroms, csv_file)

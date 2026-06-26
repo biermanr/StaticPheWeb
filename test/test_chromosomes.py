@@ -1,6 +1,7 @@
 """Tests for the chromosomes module."""
 
 import pytest
+
 from spheweb import chromosomes
 
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import fpdf
+import matplotlib.patches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -36,7 +37,7 @@ def render_manhattan_plot(out_dir: Path, data: dict[str, Any]) -> None:
     """Use the HTML template and data to generate a new Manhattan HTML file at out_dir."""
     template_path = importlib.resources.files("spheweb").joinpath("templates")
 
-    env = Environment(loader=FileSystemLoader(template_path))
+    env = Environment(loader=FileSystemLoader(str(template_path)))
     template = env.get_template("manhattan.html")
     rendered = template.render(data)
 
@@ -112,7 +113,7 @@ def render_manhattan_plot_SVG_from_legacy_JSON_data(
         # Draw rectangles for each binned variants with the qval extents
         for min_qval, max_qval in qval_extents:
             plt.gca().add_patch(
-                plt.Rectangle(
+                matplotlib.patches.Rectangle(
                     (global_pos - 0.5, min_qval),
                     1,
                     max_qval - min_qval,
@@ -210,14 +211,14 @@ def render_pdf(matrix_tsv_gz_path: pathlib.Path) -> pathlib.Path:
         new_x=fpdf.enums.XPos.LEFT,
         new_y=fpdf.enums.YPos.NEXT,
         link=about,
-        border=True,
+        border=1,
     )
     pdf.cell(
         text="2. Phenotypes",
         new_x=fpdf.enums.XPos.LEFT,
         new_y=fpdf.enums.YPos.NEXT,
         link=phenotypes_table,
-        border=True,
+        border=1,
     )
 
     #############################
@@ -240,7 +241,7 @@ def render_pdf(matrix_tsv_gz_path: pathlib.Path) -> pathlib.Path:
         new_x=fpdf.enums.XPos.LEFT,
         new_y=fpdf.enums.YPos.NEXT,
         link=table_of_contents,
-        border=True,
+        border=1,
     )
 
     #############################
@@ -262,7 +263,7 @@ def render_pdf(matrix_tsv_gz_path: pathlib.Path) -> pathlib.Path:
         new_x=fpdf.enums.XPos.LEFT,
         new_y=fpdf.enums.YPos.NEXT,
         link=table_of_contents,
-        border=True,
+        border=1,
     )
 
     # Pre-specify the links to the manhattan plot pages which will be bound to pages later

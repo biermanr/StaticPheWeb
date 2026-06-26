@@ -3,6 +3,7 @@
 import pathlib
 
 import pytest
+
 from spheweb import chromosomes, utils
 
 

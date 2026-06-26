@@ -1,6 +1,7 @@
 """Tests for the utils module."""
 
 import pytest
+
 from spheweb import utils
 
 

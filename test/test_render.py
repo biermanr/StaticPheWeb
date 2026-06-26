@@ -4,6 +4,7 @@ from pathlib import Path
 
 import html5lib
 import pytest
+
 from spheweb import process
 
 

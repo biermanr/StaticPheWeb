@@ -8,7 +8,6 @@ sandbox/
 *.csv
 *.tsv
 *.ipynb
-uv.lock
 *.swp
 *.sqlite
 *.gz

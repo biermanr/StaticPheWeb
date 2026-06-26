@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools >= 61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
 
 [project]
 name = "spheweb"
@@ -23,29 +23,42 @@ license = {text = "MIT License"}
 keywords = ["PheWAS", "GWAS", "PheWeb"]
 classifiers = [
   "Development Status :: 3 - Alpha",
-  "Intended Audience :: Bioinformaticians",
+  "Intended Audience :: Science/Research",
   "License :: OSI Approved :: MIT License",
-  "Programming Language :: Python :: 3.7",
-  "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
 ]
-
-[project.optional-dependencies]
-test = [
-  "pytest",
-  "pytest-cov",
-  "html5lib",
-  "pandas",
-]
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-spheweb = ["templates/*.html"]
 
 [project.scripts]
 spheweb = "spheweb:cli.spheweb"
+
+[dependency-groups]
+dev = [
+  "pytest",
+  "pytest-cov",
+  "html5lib",
+  "poethepoet",
+  "mypy",
+  "ruff",
+]
+
+[tool.uv.build-backend]
+module-root = "src"
+module-name = "spheweb"
+
+[tool.poe.tasks]
+test = "pytest"
+test-slow = "pytest --run-slow --cov src --cov-fail-under=80"
+lint = "ruff check ."
+format = "ruff format ."
+typecheck = "mypy src"
+check = [
+  { ref = "lint" },
+  { ref = "typecheck" },
+  { ref = "test" },
+]
 
 [tool.pytest.ini_options]
 minversion = "7"
@@ -58,10 +71,6 @@ filterwarnings = ["error"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
-
-[tool.mypy]
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
 
 [tool.ruff]
 exclude = [
@@ -109,4 +118,8 @@ line-ending = "auto"
 [tool.mypy]
 strict = true
 warn_unreachable = true
+ignore_missing_imports = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+# cli.py is excluded because Click's decorators make full typing impractical
+# (matches the established pre-commit mypy config).
+exclude = ["src/spheweb/cli\\.py"]

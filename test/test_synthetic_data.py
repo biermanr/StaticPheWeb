@@ -1,6 +1,7 @@
 """Test synthetic data generation utilities."""
 
 import pytest
+
 from spheweb import chromosomes, parsing, utils
 
 

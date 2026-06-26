@@ -1,6 +1,7 @@
 """Tests for spheweb CLI."""
 
 from click.testing import CliRunner
+
 from spheweb import __version__, chromosomes, utils
 from spheweb.cli import spheweb as cli
 

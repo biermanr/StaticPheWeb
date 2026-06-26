@@ -106,4 +106,4 @@ class TabularParser(Parser):
         """Parse the input CSV file and return a generator of Variant."""
         with open(self.file_path) as csvfile:
             for row in csv.DictReader(csvfile, delimiter=self.delimiter):
-                yield variant.Variant(**row)
+                yield variant.Variant.model_validate(row)
