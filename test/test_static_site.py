@@ -2,9 +2,13 @@
 
 import json
 
+import html5lib
 import pytest
 
 from spheweb import chromosomes, process, utils
+
+# Guards the size-wall fix: per-phenotype payload must stay small.
+MAX_PHENO_JSON_BYTES = 150_000
 
 
 def test_build_static_site(tmp_path: pytest.fixture) -> None:
@@ -39,3 +43,10 @@ def test_build_static_site(tmp_path: pytest.fixture) -> None:
     assert (site / "vendor" / "d3.min.js").exists()
     assert (site / "vendor" / "underscore-min.js").exists()
     assert (site / "vendor" / "d3-tip.min.js").exists()
+
+    # The single entry point is valid HTML5.
+    html5lib.HTMLParser(strict=True).parse((site / "index.html").read_text())
+
+    # Each per-phenotype payload stays under the size-wall budget.
+    for data_file in site.glob("data/*.json"):
+        assert data_file.stat().st_size < MAX_PHENO_JSON_BYTES
