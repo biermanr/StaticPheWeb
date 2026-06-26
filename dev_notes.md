@@ -1,0 +1,1509 @@
+Aug 5th 2024: Static D3 Diagrams
+---
+Taking notes for myself directly in the github repo, not sure if this is a good idea.
+
+I'm trying to figure out how to get a completely static d3 diagram
+built from data, so first I tried to used `d3.csv()` to read in a local
+.csv file but I was getting a CORS error in chrome which I guess
+makes sense. I next tried to use `$.getJson()` on the local csv file,
+but that also generated a CORS error.
+
+Instead I'm thinking that I'll just have to hardcode the data into the
+javascript file, which feels wrong but I think it will always work? I'll
+use Jinja to insert the data into the javascript file so at least
+its automated.
+
+Oh, apparently there is a `.tojson()` jinja function that I can use to
+convert the data to json, so I'll try that.
+
+Aug 7th 2024: Adding HTML files as package-data
+---
+With help from Vineet, I was able to add the HTML files as package data.
+I did this by creating a templates subdir of src/ and using the following
+lines in the pyproject.toml file:
+```toml
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+templates = ["*.html"]
+static = ["*.js"]
+```
+
+which worked and could be accessed with the following code:
+```python
+import importlib.resources
+p = importlib.resources.files("templates", "template.html")
+```
+
+This is working with nox and pytest locally, but not on GHA. I think
+this is because the package data is not being included in the wheel.
+How can I test this locally?
+
+I still don't know how to test it locally, but Vineet suggested that I
+use this setup where I list the paths to the files in the package data:
+```toml
+[tool.setuptools.package-data]
+spheweb = ["templates/*.html"]
+```
+
+this works locally with nox and pytest, so I'm going to try it on GHA.
+This worked for GHA for python 3.10, 3.11, and 3.12, but not for 3.9.
+Actually 3.9 fails on windows, mac, and ubuntu.
+I get the error:
+```
+TypeError: expected str, bytes or os.PathLike object, not NoneType
+```
+
+on this line:
+```python
+p = importlib.resources.files("spheweb.templates").joinpath("missing_template.html")
+```
+
+I think this is because the `importlib.resources.files` function is not
+returning a `pathlib.Path` object, but I'm not sure why. Maybe I need to
+use a backport of importlib.resources? No, it's actually because it doesn't
+handle the `joinpath` of NoneType. I've tried changing the code to:
+```python
+p = importlib.resources.files("spheweb.templates") / "missing_template.html"
+```
+
+I get the same error. The simplest fix is to just not do the "missing template" test.
+Oh no, this somehow still failed with the same error, just on the actual template test.
+
+```python
+p = importlib.resources.files("spheweb.templates") / "template.html"
+```
+
+I can't figure out why this works locally but not on GHA. I think I'm just going
+to drop python 3.9 from GHAs testing matrix. This seems so strange.
+Well, at least GHA passes now.
+
+Tomorrow I'll try to get some simple templating working with Jinja.
+Also trying to get mypy working, currently running into errors with decorators
+and "Cannot find implementation or library stub for module named 'click'".
+Trying to run with `nox`.
+
+Aug 8th 2024: Jinja Templating
+---
+Started by adding mypy to .pre-commit-config.yaml, excluding the
+`cli.py` and `noxfile.py` files, which are complicated with external packages/decorators.
+
+I'm trying to get Jinja templating working with the spheweb package.
+I got this to work without too many issues.
+I decided to use a jinja `FileSystemLoader` to load the templates from the package data
+using `importlib.resources` and then render the template with the data.
+```python
+from jinja2 import Environment, FileSystemLoader
+import importlib.resources
+
+template_path = importlib.resources.files("spheweb").joinpath("templates")
+
+env = Environment(loader=FileSystemLoader(template_path))
+template = env.get_template("template.html")
+rendered = template.render(data)
+```
+
+I think this should be a good approach that will be flexible, but I need to test on GHA (it worked!).
+The nox tests pass, including the one that I added to test the rendering.
+
+Next I need to better understand how PheWeb is making the Manhattan plots.
+I'm curious how many points are actually being plotted, since the plots load very quickly
+and the MLMA files can be very large.
+
+Looking through the PheWeb code line 22 of [pheno.html](https://github.com/AkeyLab/DAP_pheweb/blob/master/pheweb/serve/templates/pheno.html#L22),
+I see that there is a call to:
+
+```javascript
+$.getJSON(window.model.urlprefix + "/api/manhattan/pheno/" + window.pheno + ".json")
+.done(function(data) {
+  window.debug.manhattan = data;
+  create_gwas_plot(data.variant_bins, data.unbinned_variants);
+  populate_streamtable(data.unbinned_variants);
+})
+```
+
+which is a call to the `manhattan` endpoint of the API.
+What is the `window` object? I think it's just a global object in javascript.
+
+So I need to look through the flask routing to find the `manhattan` endpoint. Yes, this is defined in [`server.py`](https://github.com/AkeyLab/DAP_pheweb/blob/538b3a608f6d78b63cdec809b8014b6ef15104f0/pheweb/serve/server.py#L132) on line 132:
+```python
+@bp.route('/api/manhattan/pheno/<phenocode>.json')
+@check_auth
+def api_pheno(phenocode:str):
+    return send_from_directory(get_filepath('manhattan'), '{}.json'.format(phenocode))
+```
+so it's just passing the entire json file for the given pheno to the client.
+I've checked in the `generated-by-pheweb/manhattan` folder which has all
+the json files for the phenos, and they are all small actually, at only
+~164KB.
+
+Here's how the json is structured:
+```json
+{
+    "variant_bins":[
+        {'chrom': '1', 'qvals': [2.775, 2.875, 3.475], 'qval_extents': [[0.025, 2.525], [2.625, 2.675]], 'pos': 1500000},
+        {'chrom': '1', 'qvals': [2.075, 2.175, 2.475], 'qval_extents': [[0.025, 1.925]], 'pos': 4500000},
+        {'chrom': '1', 'qvals': [3.175], 'qval_extents': [[0.025, 2.425], [2.575, 2.625], [2.875, 3.075]], 'pos': 7500000},
+        ...
+    ],
+    "unbinned_variants":[
+        {'chrom': '18', 'pos': 55150763, 'ref': 'A', 'alt': 'G', 'rsids': '', 'nearest_genes': 'FADS3', 'pval': 4.2e-08, 'beta': -0.26, 'maf': 0.29, 'num_significant_in_peak': 1, 'peak': True},
+        {'chrom': '17', 'pos': 38436418, 'ref': 'G', 'alt': 'A', 'rsids': '', 'nearest_genes': 'LOC102154258', 'pval': 1.1e-07, 'beta': 0.38, 'maf': 0.093, 'num_significant_in_peak': 0, 'peak': True},
+        {'chrom': '17', 'pos': 38436369, 'ref': 'G', 'alt': 'A', 'rsids': '', 'nearest_genes': 'LOC102154258', 'pval': 2.6e-07, 'beta': 0.37, 'maf': 0.091},
+        ...
+    ]
+}
+```
+In the one file I looked at ("Lysine.json"), there are 502 `unbinned_variants` and 764 `variant_bins`.
+
+I'll look into the code to understand how these json files were created, but
+first I want to understand how the `create_gwas_plot` function works.
+
+There are two `create_gwas_plot` functions, one in `pheno.js` and
+one in `pheno-filter.js`. I'm not sure which is being used, but lets
+look at the one in [`pheno.js`](https://github.com/AkeyLab/DAP_pheweb/blob/538b3a608f6d78b63cdec809b8014b6ef15104f0/pheweb/serve/static/pheno.js#L5) first. This function is ~400 lines long.
+It has the following signature, showing that is uses both
+`variant_bins` and `unbinned_variants`:
+```javascript
+function create_gwas_plot(variant_bins, unbinned_variants)
+```
+
+The `unbinned_variants` are used to create circles on the d3 plot
+starting on line [293](https://github.com/AkeyLab/DAP_pheweb/blob/538b3a608f6d78b63cdec809b8014b6ef15104f0/pheweb/serve/static/pheno.js#L293)
+with the `pp1()` and `pp2()` functions.
+
+The `variant_bins` are used also added to the plot as circles in
+teh `pp3()` function. There's a comment that:
+```javascript
+// drawing the ~60k binned variant circles takes ~500ms.  The (far fewer) unbinned variants take much less time.
+```
+
+but we saw in the json file that there are only 764 `variant_bins`.
+So this must be an old comment. Also I don't yet understand the difference
+of pp1() and pp2(). But, as an answer to the question of
+"how many points are being plotted", it's about 1,300 points.
+
+This is good news for the approach I'm taking since I'll only be rendering
+a dictionary with 1,300 points into the html file.
+
+I should download one of these json files and write my own d3
+code to plot it. (Probably heavily inspired by PheWeb's)
+
+Aug 9th 2024: Simplest Manhattan plot with pre-processed json data
+---
+I've downloaded multiple json files created by PheWeb that are
+used to create the Manhattan plots. My goal today is to create
+a simple HTML template in Jinja that will render a Manhattan plot
+with the data from the json file and as simple of D3 as I can manage.
+
+Ok! I got the Manhattan plot working with the pre-processed json data!
+This is pretty exciting, next step is going to be to try and remove any
+extra code, try to simplify the D3 code as much as possible and add tests.
+What is pp1() vs. pp2() vs. pp3() etc?
+
+When I commented out pp2(), it removed the most significant points from the plot.
+Ok, apparently pp1() is for "variant_hover_rings"(?) which have opacity of 0
+meaning that they are invisible. pp2() is for "variant_points" which are the actual
+dots in the plot. Removing pp1() doesn't seem to have any ill-effects.
+
+Getting rid of pp3() removes the low p-value points from the plot.
+
+I've renamed pp2() to `add_variant_points()` and pp3() to `add_variant_bins()`.
+
+Ok, now how am I going to test this? I could parse the resulting HTML file
+to ensure that it's valid HTML at the very least. I think SELENIUM testing
+is overkill for this project, but I could use it to test the interactivity of the plot.
+
+Ok, I added this and it passes, but again it's not testing the javascript, just the HTML.
+
+Now I'm going to switch gears and figure out how the json file is created by
+PheWeb from the input CSV data. This is done in the `manhattan.py` file here:
+`https://github.com/AkeyLab/DAP_pheweb/blob/master/pheweb/load/manhattan.py`
+and it's only ~200 lines long.
+
+Seems like the crux of the code is:
+```python
+def make_manhattan_json_file_explicit(in_filepath:str, out_filepath:str) -> None:
+    binner = Binner()
+    with VariantFileReader(in_filepath) as variants:
+        for variant in variants:
+            binner.process_variant(variant)
+    data = binner.get_result()
+    write_json(filepath=out_filepath, data=data)
+```
+
+where Binner is a class created in this file that has a `process_variant` method.
+
+The `for` loop is processing each variant in the input CSV file withe the Binner,
+which is handling the logic of identifying peaks in the data. This is documented
+very nicely in the function docstring:
+
+```python
+def process_variant(self, variant:Variant) -> None:
+    '''
+    There are 3 types of variants:
+        a) If the variant starts or extends a peak and has a stronger pval than the current `peak_best_variant`:
+            1) push the old `peak_best_variant` into `unbinned_variant_pq`.
+            2) make the current variant the new `peak_best_variant`.
+        b) If the variant ends a peak, push `peak_best_variant` into `peak_pq` and push the current variant into `unbinned_variant_pq`.
+        c) Otherwise, just push the variant into `unbinned_variant_pq`.
+    Whenever `peak_pq` exceeds the size `conf.get_manhattan_peak_max_count()`, push its member with the weakest pval into `unbinned_variant_pq`.
+    Whenever `unbinned_variant_pq` exceeds the size `conf.get_manhattan_num_unbinned()`, bin its member with the weakest pval.
+    So, at the end, we'll have `peak_pq`, `unbinned_variant_pq`, and `bins`.
+    '''
+```
+
+So, this answers my question of what the `variant_bins` and `unbinned_variants` are in the json file.
+The `variant_bins` are the peaks in the data, and the `unbinned_variants` are the "combined" variants that are not in a peak.
+Basically, "standout" vs. "normal" variants. I think there might be a simpler way to do this where you just bin all the variants
+by a static window-size and only display the most significant variant per-window in the plot. The human
+genome is 3.2 billion base pairs long, so if we bin by 1 million base pairs, we'd have 3,200 bins. Hmm, maybe this is
+not as good as the current method. Oh wait, they use a `BIN_LENGTH` of 3e6, so ~1,000 bins for the human genome.
+Maybe the simpler approach I'm thinking about will be fine afterall.
+
+Some of the MLMA files has 11 million variants, so these are getting boiled down to ~800 bins + 500 variants by current PheWeb.
+For dog weight phenotype, there are only 42 bins for chr1, 29 for chr2, 31 for chr3.
+Maybe I'll create an abstract base class for the Binner and then create a new class that just bins by a static window-size.
+Then if that looks bad I can create a new Binner that bins by peaks, or some other method.
+
+Ok, I started adding this, but I'm making a lot of architectural decisions all at once, so I'm going to hold off for now.
+Instead I'm going to try to think of what the user interface for this tool will look like.
+
+Let's say the user runs the following command:
+```bash
+spheweb build \
+    --gtf genes.gtf \
+    --chroms chroms.txt \
+    --phenos pheno-list.json \
+```
+
+Where `genes.gtf` is a GTF file with the gene annotations and `pheno-list.json` is a json file with the list of per-phenotype MLMA/CSV files.
+The `chroms.txt` file is just a text file with a column for chromosome names, start, and end positions, like:
+```
+chr1 1 248956422
+chr2 1 242193529
+...
+```
+
+We can have some default `--chroms` like how plink does it with `--chroms hg19` or `--chroms hg38` or `--chroms canFam4` etc.
+spheweb should also accept gff3 files since those are supposed to be the new standard for gene annotations.
+Finally, maybe we could provide the option to download the gene annotations and chromosomes from UCSC, but having users
+download a gtf file themselves sounds like a good place to start.
+
+We can have `pheno-list.json` be the same structure as PheWeb currently uses, something like:
+```json
+{
+    "phenos": [
+        {
+            "name": "Dog Weight",
+            "file": "dog_weight.csv"
+        },
+        {
+            "name": "Dog Height",
+            "file": "dog_height.csv"
+        }
+    ]
+}
+```
+This file might not be the easiest format for people to use, but it's a good place to start since PheWeb already demands it.
+Maybe there can be a separate spheweb command eventually that will take a directory of MLMA files and create this `pheno-list.json` file.
+We can have some other configuration parameters eventually, but not at the start.
+
+
+Aug 12th 2024: Data validation
+---
+
+I started today thinking I would copy the PheWeb binning code for manhattan plots, so I was reading through the `manhattan.py` file
+and I saw that they do a good job of validating the input data CSV/TSV which I hadn't considered.
+
+I like how simple their validating/parsing/binning code looks:
+```python
+def make_manhattan_json_file_explicit(in_filepath:str, out_filepath:str) -> None:
+    binner = Binner()
+    with VariantFileReader(in_filepath) as variants:
+        for variant in variants:
+            binner.process_variant(variant)
+    data = binner.get_result()
+    write_json(filepath=out_filepath, data=data)
+```
+
+I want to copy this idea where there is a `Parsing` abstract base class that is
+responsible for validating the input data from a few different common formats.
+Then the `Binning` classes will make use of the `Parsing` classes to get the data.
+I'm thinking that the `Parsing` class will be iterable and will yield the validated
+data row-by-row. This way the `Binning` classes can be more flexible in how they
+process the data. All the different `Parsing` classes will need to provide the same
+interface, which I can do by having a `Variant` dataclass that all the `Parsing` classes
+will return.
+
+I'll start with creating the `Variant` pydantic class and test that
+with different inputs. So far I'm pleased with how this is going, its
+been really easy and expressive to define:
+* Optional fields
+* Multiple aliases for the same field
+* Bounds on numeric fields
+
+I've written multiple tests for validating a test variant dictionary
+including tests that use `pytest.raises` to ensure certain inputs fail.
+The error messages are currently very ugly, but I'll fix that later.
+
+Ok, I think I've got the `Variant` class working well, so I'm going to
+move on to the `Parsing` classes. I'm going to start with the `CSVParser`
+which will use the `csv` module to read in the data and validate it.
+
+I moved on to writing a CSV parser, and WOW I was not expecting how nice
+the code would look:
+```python
+class CSVParser(Parser):
+    """Parser for CSV/TSV files."""
+    def __init__(self, file_path: Path):
+        self.file_path = file_path
+
+    def __iter__(self) -> Iterable[variant.Variant]:
+        """Parse the input CSV file and return a generator of Variant."""
+        with open(self.file_path, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                yield variant.Variant(**row)
+```
+
+I wrote a test, with the help of github copilot that:
+1. Writes a mock CSV file with two lines of data
+2. Creates a `CSVParser` object with the mock file
+3. Iterates over the `CSVParser` object and checks that the data is correct
+
+This works so well, and it seems so simple!
+I ended up renaming `CSVParser` to `TabularParser` since it can handle both CSV and TSV files, etc. Added an additional test for TSV.
+
+pydantic is really nice for this use case, and having github copilot
+help write tests is really nice.
+
+
+Aug 13th 2024: Implementing the Binner
+---
+
+Yesterday I got the `Variant` and `TabularParser` classes working, so today I'm going to implement a `Binner` class.
+
+The `Binner` from PheWeb is kind of complicated,
+so it might take me a while to implement it in a
+way that I understand and I'm happy with, but it
+will be nice to have the compatibility with PheWeb
+and know what output I should be getting.
+
+Maybe before doing this though, I'm a little nervous
+that the `TabularParser` is slow for the large MLMA files, so I'm going to test how long it takes to
+just parse one of the DAP MLMA files, maybe weight.
+This file is ~500 MB in size with 9.8M lines.
+
+I added a click subcommand `validate_input` which just creates a tabular parser, and iterates through
+the lines, counting how many there are:
+
+```python
+@spheweb.command()
+@click.argument("tabular_file", type = Path)
+@click.option("--delim", "-d", default=',', type = str)
+def validate_input(tabular_file, delim) -> None:
+    """Validate format of input CSV file, or use --delim to specify other tabular format."""
+    num_lines = sum(1 for _ in parsing.TabularParser(tabular_file, delim))
+    click.echo(f"File {tabular_file} with {num_lines} successfully parsed!")
+```
+
+It "only" took 25 seconds to get through this file,
+so it's not terribly unworkably slow for now,
+but I'm certain it could be a lot faster. Iterating
+over the lines with just a `with open()` and not
+validating the input only takes 1 second.
+
+If someone had 300 phenotypes they wanted to use
+for the PheWeb, it would take 150 minutes or around
+2 hours, and this is just for parsing the input.
+
+How long does it take if I use the `csv.DictReader`
+but not the `pydantic` model for validation? 9 seconds, ok. So the `csv.DictReader` is slow, but
+so is the pydantic model parsing. I'll put this
+on the backburner for now and try to get something
+working all the way through first.
+
+#### Understanding the Binner
+Ok, now I'm going to read through the PheWeb binning
+code more closely and take notes. It inits the
+`Binner` with two `MaxPriorityQueue` objects that
+PheWeb defined itself. The goal of these queue's is
+to be a maximum size heap that maintains heap order.
+
+The function `process_variant` is called for each
+variant in the input data. It has some logic to
+try and figure out how many bins to create, but I
+think it's flawed since it can be set and unset
+by subsequent variants in the list, so the order
+of variants will effect the final number of bins.
+
+```python
+if variant['pval'] != 0:
+    qval = -math.log10(variant['pval'])
+    if qval > 40:
+        self._qval_bin_size = 0.2 # this makes 200 bins for a y-axis extending past 40 (but folded so that the lower half is 0-20)
+    elif qval > 20:
+        self._qval_bin_size = 0.1 # this makes 200-400 bins for a y-axis extending up to 20-40.
+```
+
+Next, if a variant is in a peak because it has
+a sufficiently low p-value, it will be added to
+an existing peak or a new peak will be created.
+
+```python
+if variant['pval'] < conf.get_manhattan_peak_pval_threshold(): # part of a peak
+    if self._peak_best_variant is None: # open a new peak
+        ...
+
+    elif self._peak_last_chrpos[0] == variant['chrom'] and self._peak_last_chrpos[1] + conf.get_manhattan_peak_sprawl_dist() > variant['pos']: # extend current peak
+        ...
+
+    else: # new chromosome or far enough away, close old peak and open new peak
+        ...
+```
+
+So it seems like it's looking one sorted variant
+at a time and deciding where to put the variant.
+
+There are two helper functions for actually pushing onto the peak and bin priority queues.
+
+```python
+    def _maybe_peak_variant(self, variant:Variant) -> None:
+        self._peak_pq.add_and_keep_size(variant, variant['pval'],
+                                        size=conf.get_manhattan_peak_max_count(),
+                                        popped_callback=self._maybe_bin_variant)
+
+    def _maybe_bin_variant(self, variant:Variant) -> None:
+        self._unbinned_variant_pq.add_and_keep_size(variant, variant['pval'],
+                                                    size=conf.get_manhattan_num_unbinned(),
+                                                    popped_callback=self._bin_variant)
+```
+
+So the `Binner` is maintaining two priority queues, one for the peaks and one for the unbinned variants. Each entry in the priority queue is a single `Variant` object that is used as the
+representative of the peak or bin.
+
+The `popped_callback` is a function that gets called for variants that are removed from
+the peak priority queue, to see if it should be added to the bin pq, and then finally to
+the _bin_variant function which actually bins the variant.
+
+I don't know why this code feels so complicated, I still don't have a great understanding
+of what it's trying to accomplish. Which Variants should be Peaks, and which should be Bins?
+
+I see there is a `conf.py` file which specifies a maximum of 500 peaks and 500 bins.
+And there is a "sprawl distance" of 200_000 which is used to determine the maximum distance
+between two significant variants to be considered part of the same peak.
+
+Ok, maybe this is as far as I go into understanding the code, and I'm just going to implement
+it as is and make sure I can get the same output as PheWeb.
+
+Update on this. I was able to get the legacy
+code working, linted, mypy'd, and tested.
+It ran without error, but produced a
+different JSON output on the same input data.
+Oh, I should also say I was able to get a manhattan d3 plot
+working after I adjusted the `Variant` pydantic class to have
+the same field names as the PheWeb `Variant` dict.
+
+I will have to return to this, I want to know why there are
+differences when I copied/pasted their code and made what I thought
+were only refactorings.
+
+I also learned a lot about Iterable vs. Iterator (mypy wants the later)
+and I made some more organization decisions about the project structure.
+Right now, for example, Binner's must use a parser as an argument to
+their `bin` function.
+
+Aug 14th 2024: Continued work on Binner
+---
+I thought I'd check to make sure that the json file I copied
+from a previous PheWeb run was the same as if I generate it again
+using the DAP pheweb, so I ran `pheweb process` on just the weight
+CSV file. This was also helpful in seeing that the `parse-input-files`
+step took 88 seconds for the single phenotype, so the 30 seconds I'm
+seeing (so far at least) isn't too bad.
+
+```bash
+==> Starting `pheweb parse-input-files`
+Processing 1 phenos
+Completed    1 tasks in 87 seconds
+==> Completed in 88 seconds
+```
+
+Oh wait, this parse-input-files step actually just
+takes the input CSV, parses it, and generates and output
+gzipped CSV in `generated-by-pheweb/parsed/Weight`
+
+I saw that this file is 9,867,132 lines long, so it's
+just a pre-processing step that I'm pretty sure we don't
+need to copy. There is a lot of logic in the
+`pheweb/load/read_input_file.py` script which is already
+handled for us by pydantic, except we need to add ordering
+checks to make sure the chromosomes and positions are in order.
+
+I'll add these checks now before I forget.
+My idea is to make the `Parser` class accept
+a `ChromList` object.
+
+I'm actually having trouble figuring out
+how to add the order-validation logic
+into the parser. I want to ensure that
+when someone writes a new parser, they
+don't forget to validate the order. So
+I don't want to just add this logic to
+the __iter__ method of the TabularParser.
+
+Maybe I should be using a normal class
+for Parser instead of an abstract base
+class, so that way I can implement the
+`__iter__` method in the base class and
+have it call a `validate_order` method
+that will also be implemented in the base
+class.
+
+This is the implementation I decided on, but I think
+it's not very clean because there's a lot of validation
+logic for chroms/positions in the `Parser` base class
+that would make more sense to move to the `Variant` pydantic class.
+
+Ok, well that was a long aside in order to implement checks for
+the data being in order. Let's see how much those checks slow
+down the parsing with a call to `spheweb validate-input`. Oh,
+very nice, it's still 28 seconds!
+
+Returning to trying to figure out why the JSON produced by PheWeb
+and Spheweb are different. I think there might be additional processing
+occuring in the steps before the manhattan processing step. Here are the
+steps in order (there are a lot of steps):
+1. `pheweb phenolist verify`
+    * Took 0 seconds, just checks that the phenolist is valid
+2. `pheweb parse-input-files`
+    * Took 88 seconds to convert the input CSV into a parsed GZIP with the same number of rows
+3. `pheweb sites`
+    * Took 39 seconds. This extracts all variants from all phenotypes and unions them. Writing out to `sites/sites-unannotated.tsv`
+4. `pheweb make-gene-aliases-sqlite3`
+    * Took 51 seconds. This "Makes a database of all gene names and their aliases for easy searching."
+5. `pheweb add-rsids`
+    * Took 39 seconds. This annotates the sites with RSIDs. Writing out to `sites/sites-rsids.tsv`
+6. `pheweb add-genes`
+    * Took 71 seconds. Annotates the sites with the nearest genes. Writes out to `sites/sites.tsv`
+7. `pheweb make-cpras-rsids-sqlite3`
+    * Took 32 seconds. Makes a database to convert between RSIDs and chrom/pos/ref/alt (CPRA).
+8. `pheweb augment-phenos`
+    * Took 87 seconds. I think this is attributing the variants to the phenotypes. Produces the `generated-by-pheweb/pheno_gz/*.gz` files and associated tabix files.
+9. `pheweb matrix`
+    * Took 12 seconds. This "creates a single large tabix file with all the variants for all phenotypes." Produces `generated-by-pheweb/matrix.tsv.gz` and associated tabix file.
+10. `pheweb gather-pvalues-for-each-gene`
+    * Took 10 seconds. This gets the best p-values for each gene and writes out `generated-by-pheweb/best-phenos-by-gene.sqlite3`.
+11. `pheweb manhattan`
+    * Took 42 seconds and produced the `generated-by-pheweb/manhattan/Weight.json` file.
+    * Takes as input the `pheno_gz/` files.
+
+
+I reran all these steps and still got a disagreement for the JSON file between
+PheWeb and SpheWeb. They both have 764 `variant_bins`, although the binning
+is different, but additionally the `unbinned_variants` are different with
+PheWeb having 596 unbinned_variants and Spheweb having 1000 unbinned_variants.
+
+
+Aug 22nd 2024: Continued Binner Tracing
+---
+Returning to this project after a break. Immediate todo is still to figure out why the
+`unbinned_variants` are different between PheWeb and Spheweb.
+
+I'm going to edit the steps list above with my understanding of what each step is doing.
+
+I think the `sites` step might be doing some filtering as it extracts all variants from all phenotypes and unions them.
+It uses the `VariantFileReader` in `file_utils` to read in the variants from the input
+CSV files. Spheweb doesn't use this because it reads in the variants directly from the input CSV file with the `TabularParser`.
+It looks like, no, there isn't any filtering going on here. The `class _vfr_only_per_variant_fields` is what's being used. I'll check the output of this
+step to verify. Ok, this file is gzipped, but has `9,867,132` lines, including the header line, which is the same as the original input, so no filtering is happening here.
+
+The `make_gene_aliases_sqlite3` step is creating a sqlite3 database of all gene names and their aliases for easy searching, I don't think this has anything to do with
+filtering the variants. The output of this step is `resources/gene_aliases-v{}.sqlite3`.
+
+Next is the `add-rsids` step which is annotating the sites with RSIDs. This produces the output file `sites/sites-rsids.tsv` which is also `9,867,132` lines long, so again no filtering is being done here.
+
+Next is the `add-genes` step which annotates with the closest gene. This produces the output file `sites/sites.tsv` which is also `9,867,132` lines long, so again no filtering is being done here.
+
+Next is the `augment_phenos` step which looks like it assigns each phenotype sites
+from the combined sites file. Since we're just running on weights, it just produces the `generated-by-pheweb/pheno_gz/Weight.gz` file and a corresponding tabix index. This file has `9,867,132` lines, so no filtering is being done here.
+
+Next is the `matrix` step which combines all the phenotypes into a single large tabix file. This produces the `generated-by-pheweb/matrix.tsv.gz` file which is also `9,867,132` lines long, so no filtering is being done here.
+
+Next is the `gather-pvalues-for-each-gene` step which gets the best p-values for each gene. This produces the `generated-by-pheweb/best-phenos-by-gene.sqlite3` file. And I don't think this has anything to do with the number of sites or filtering.
+
+Finally is the `manhattan` step which produces the `generated-by-pheweb/manhattan/Weight.json` file which is the one I'm comparing to the Spheweb output. This uses the
+`pheno_gz` gzipped tsv file `generated-by-pheweb/pheno_gz/Weight.gz` to produce
+the manhattan plot json file. It looks like I've pretty much copied all the logic
+from this step, so I'm not sure why the output is different.
+
+Maybe I'll try using the `pheno_gz` file from PheWeb for spheweb to see if that changes the output. Here's a quick comparison of the heads of these two files:
+
+```bash
+==>    dd_weight_lbs_N-7378.loco.csv  <==
+chrom  pos                            ref  alt  pval      beta           maf
+1      5753                           G    A    0.622122  0.00430721     0.42477600000000004
+1      13961                          G    T    0.622616  0.0141087      0.0194497
+1      14118                          G    C    0.721309  0.00951598     0.0242613
+1      14132                          A    C    0.999789  5.68787e-06    0.0385606
+1      14926                          C    T    0.786221  -0.00919041    0.0138927
+1      14935                          A    T    0.2782    -0.0391365     0.0119951
+1      14990                          G    A    0.125876  0.0279618      0.0508946
+1      15016                          G    A    0.637314  -0.00600085    0.120968
+1      15091                          A    T    0.981062  0.000608517    0.0238547
+
+==>    weight_pheno_gz.tsv            <==
+chrom  pos                            ref  alt  rsids     nearest_genes  pval       beta        maf
+1      5753                           G    A                   ENPP1     0.62       0.0043      0.42
+1      13961                          G    T                   ENPP1     0.62       0.014       0.019
+1      14118                          G    C                   ENPP1     0.72       0.0095      0.024
+1      14132                          A    C                   ENPP1     1.0        5.7e-06     0.039
+1      14926                          C    T                   ENPP1     0.79       -0.0092     0.014
+1      14935                          A    T                   ENPP1     0.28       -0.039      0.012
+1      14990                          G    A                   ENPP1     0.13       0.028       0.051
+1      15016                          G    A                   ENPP1     0.64       -0.006      0.12
+1      15091                          A    T                   ENPP1     0.98       0.00061     0.024
+```
+
+You can see that the `pheno_gz` (2nd file) has two additional columns,
+`rsids` and `nearest_genes`, but the rest of the columns are the same.
+Additionally the `pheno_gz` is rounding the values of `pval`, `beta`, and `maf`.
+
+I reran the `generate_legacy_manhattan_json` function with the `pheno_gz` file
+and got the same number of `unbinned_variants` as spheweb (1000) if its run
+directly on the CSV file. So now I'm convinced that the difference is due to
+the legacy_binning that I tried to implement.
+
+This was kind of a frustrating exercise, but also a good learning experience and
+another opportunity to walk through PheWeb's codebase.
+
+I've decided that I'm going to allow `variant` to just be a dict so that I can
+use all the logic and fields from the PheWeb binning, rather than using my new
+pydantic model. I had a few lines of code commented out that I didn't think was
+doing anything, but I was probably wrong(?). I'm rerunning with this change. Nope,
+still have 1000 unbinned_variants, instead of 596.
+
+Well I think I'm going to have to give up on this for now. Visually the plots
+look the same, so I'm not sure what the difference is. Next I'll implement the
+datatable below the plot and see if those differ.
+
+Adding the javascript datable under the plot
+----
+
+It looks like the StreamTable is created in the `pheno.html` template file by
+creating a `<table>` element with the id `stream_table`. There is an import
+for a local copy of the `pheweb/serve/static/vendor/stream_table-1.1.1.min.js`
+file.
+
+Also there is a call to `populate_streamtable(data.unbinned_variants);` in the
+`pheno.html` template. This function is defined in `pheweb/serve/static/pheno.js`.
+Note how it is only called with the `unbinned_variants` data.
+
+I think I'm instead just going to use Jinja templating to build the table without
+the use of the `stream_table` library. This won't have pagination, but I think it's
+an easy place to start and I can always add it later.
+
+I've made the table, it was really easy with jinja!
+Just added:
+```html
+<div id="variants_table_container">
+    <table id="stream_table" class="table table-striped table-bordered">
+    <thead>
+        <tr>
+        <th>Variant</th>
+        <th>Nearest Gene(s)</th>
+        <th>MAF</th>
+        <th>P-value</th>
+        <th>Effect Size (se)</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for v in data["unbinned_variants"] %}
+    <TR>
+        <TD>{{ '{}:{} {}/{}'.format(v["chrom"], v["pos"], v["ref"], v["alt"]) }}</TD>
+        <TD>No genes</TD>
+        <TD>{{ '{:.2e}'.format(v["minor_allele_frequency"]) }}</TD>
+        <TD>{{ '{:.2e}'.format(v["pval"]) }}</TD>
+        <TD>{{ '{:.2e}'.format(v["effect_size"]) }}</TD>
+    </TR>
+    {% endfor %}
+    </tbody>
+    </table>
+</div>
+```
+
+And this made an ugly table, but it's a start and looks like:
+```
+Variant	Nearest Gene(s)	MAF	P-value	Effect Size (se)
+15:41521885 T/C	No genes	4.82e-01	9.03e-50	-1.48e-01
+15:41521682 A/G	No genes	4.82e-01	1.11e-49	-1.48e-01
+```
+
+Actually, it looks like these two peaks are too close together, they are only 203 base pairs apart, which is closer than the 200,000 base pair sprawl distance. Looking at the PheWeb results, I only see the first peak, not the second. Ahah! This is a good way
+to debug.
+
+Also I'm happy to say that the .html file is only 500K, so it's still small enough to be reasonable to load in the browser really quickly.
+
+Ahah! I definitely found a bug with how the `self.manhattan_peak_sprawl_dist` was
+being used by me. I had incorrectly substituted some code to avoid a function call.
+This might work now.
+
+No, there is still an issue with these two peaks both being recorded in the output.
+Need to follow-up on another day.
+
+
+Sept 3rd 2024: Continued debugging of legacy binning
+---
+Noticing another discrepancy between the PheWeb and Spheweb output where
+the 0-th "variant bin" for the PheWeb output is:
+```python
+{'chrom': '1',
+ 'qvals': [3.05, 3.65, 3.95],
+ 'qval_extents': [[0.05, 2.85], [3.35, 3.45]],
+ 'pos': 1500000}
+```
+
+whereas the Spheweb output is
+```python
+{'chrom': '1',
+ 'qvals': [3.05, 3.95],
+ 'qval_extents': [[0.05, 2.85], [3.35, 3.45], [3.65, 3.75]],
+ 'pos': 1500000}
+```
+
+so it seems like the Spheweb output is missing the 3.65 from `qvals` and somehow
+added it to the `qval_extents`.
+
+I'm rerunning PheWeb to regenerate the output to see if the bug is still present,
+it probably should be since I haven't changed anything in the code, but this is
+just a sanity check. The 11 steps of `pheweb process` need to finish. Will probably
+take around 10 minutes.
+
+I should restrict to just chr10 and rerun both PheWeb and SpheWeb after this to
+get a smaller output to compare.
+
+The outputs are really similar on just chr10, but there are still some differences.
+Looks like the `qval_extents` are still different:
+```python
+#pheweb chr10 variant_bins
+{'chrom': '10',
+ 'qvals': [6.45, 6.65],
+ 'qval_extents': [[0.05, 4.75], [5.05, 6.25], [6.85, 7.85]],
+ 'pos': 1500000}
+```
+
+
+```python
+#spheweb chr10 variant_bins
+{'chrom': '10',
+ 'qvals': [6.45, 6.65],
+ 'qval_extents': [[0.05, 4.85], [5.05, 6.25], [6.85, 7.85]],
+ 'pos': 1500000}
+```
+
+I think there must be differences in the `_get_qvals_and_qval_extents` function.
+No, the code looks identical. I'm going to try debugging with pdb. Ok, using pdb
+was helpful for spheweb, I understand now that the `qval` and `qval_extents` are
+calculated at the end in the `get_result` function which is called once after all
+the variants have been processed. The difference between `qval` and `qval_extents` is
+that `qvals` are the "singular" q-values that can occur when trying to bin the q-values.
+For example, walking through the `for` loop binning the qvalues in the `_get_qvals_and_qval_extents`, this populates the `extents` list to look like:
+```python
+[(0.05, 4.85), (5.05, 6.25), (6.45, 6.45), (6.65, 6.65), (6.85, 7.85)]
+```
+
+This is the result of binning qvalues that are within 10% of the qval_bin_size of the current max qval.
+
+And from this, you can see that `6.45` and `6.65` are the qvals because these are "singular" bins, or "q-values that form their own bin" because they are too far aways from the previous or subsequent q-values. The `qval_extents` are the non-singular ranges.
+
+Adding print-statements to the `pheweb` manhattan.py, I see that the `extents` for the
+same region are:
+```python
+[(0.05, 4.75), (5.05, 6.25), (6.45, 6.45), (6.65, 6.65), (6.85, 7.85)]
+```
+
+so literally the same except for the 4.75 vs. 4.85.
+Let me check the qvals. Ok, the qvals are different for this region, so this is
+likely a result of different variants being added to this bin. So instead I'm going to check the variants that are being added to this bin.
+
+I think this the binning is being done in the `_bin_variant` function, but this
+is called by `_maybe_bin_variant` which is called by `_maybe_peak_variant` if
+priority queue gets full. Actually I'm getting confused. The json file produced by
+pheweb at `manhattan/Weight.json` doesn't have any actual position information, just
+the qvals and qval_extents.
+
+Actually, I'm wondering if the rounding of p_values to generate the `pheno_gz/` files
+by pheweb is causing the slight differences. I reran spheweb on the `pheno_gz/` file
+created by `pheweb` after gunzipping it.
+
+Yes! That fixed the `qval_extents` difference!
+I wonder if it will also fix the differences in the `unbinned_variants`, yes it has!
+Ok, I think this means that the manhattan plots will be the same too! Let me check.
+
+The Manhattan plots are NOT the same, comparing the Broad website `https://broad.io/dogPheweb` vs. the spheweb output, the actual loci are different, but comparing
+the spheweb output to the pheweb output, the loci are the same! Must be some
+difference between the "production" PheWeb and the local PheWeb, but I'm happy now.
+
+I'm going to say that this is a win and the comparison is complete! The legacy
+code will remain as part of the project for a while, and maybe forever, I will include
+a small test file in the tests directory to allow the legacy code to be tested.
+
+Ok, finished this on Sept 4th finally, pushed the `legacy_binning` to `dev`.
+It was little enough work that I didn't make a new entry here for it.
+
+Noticed, however, that although the generated json files are identical between
+PheWeb and SpheWeb, the tables below the manhattan plots are NOT identical. So
+there must be some logic that is performed in determining which variants are
+shown in the table. Yes, there are actually only 96 variants shown in the table
+for "dog weight" in PheWeb even though there are 596 unbinned variants that are
+used for plotting. Ohh, this is controlled by the `{"peak": true}` field in the
+dictionary of each variant!
+
+This code is in the `populate_streamtable` function in `pheweb/serve/static/pheno.js`.
+
+This was a good thing to learn, the variants listed in the table are only a
+subset of the variants used to create the manhattan plot. I have to decide
+if I want to implement this the same way in SpheWeb, but at least now I
+understand PheWeb better.
+
+Nov 11th 2024: Returning to the project, made Parser an iterator with __next__
+---
+I was looking through the `test_tabular_parser` tests and tried to rewrite the tests
+to use `next()` instead of `for` loops since I thought that looked cleaner, but
+when I tried, I realized that the `TabularParser` class wasn't an iterator. I needed
+to add the `__next__` method to the class to make it an iterator and change the `__iter__`
+function to return `self`. I'm not 100% sure I did this correctly, but the tests pass and
+the tests now exercise both forms of iteration.
+
+Nov 11th 2024: Adding coverage testing
+---
+The coverage is not currently calculated in the pre-commit hooks, so I'm going to add
+Oh, apparently this is bad form since we want to keep pre-commit hooks fast, and tests
+are usually slow, but I don't see why this would be an issue as long as I mark the slow
+tests and don't use that mark with pre-commit, only with GHA. Actually its fine to include
+the "slow" tests for now in the pre-commit hooks, but if they become too slow, I can
+just run them on the github actions (GHA) CI.
+
+Also added tests for the `Chromosome` module and got the coverage up to ~80%.
+Ran into issues with GHA failing to calculate coverage because I wasn't installing the package
+in editable mode. Fixed this.
+
+Learned some interesting things about the NotImplemented comparison behavior in Python.
+Specifically, it seems like even if NotImplemented is returned from __eq__, the comparison
+of a custom class and a built-in class will return False. Strangely __lt__, __gt__, etc.
+will return NotImplemented. Oh, also learned about the functools total_ordering decorator
+which lets you define only two of the comparison methods and it will fill in the rest!
+
+Finally, I realized that coverage HTML report is exactly what I'm attempting to make spheweb
+produce!
+
+
+Mar 11th 2025: Naively converting matrix.tar.gz to sqlite
+---
+The `matrix.tar.gz` for DAP is 11GB and is required for the `Variant` endpoint in the API.
+It has the format:
+```
+#chrom  pos    ref  alt  rsids  nearest_genes  pval@1-3-Methylhistidine  beta@1-3-Methylhistidine  ...
+1       5753   G    A    ENPP1  0.98           -0.0012                   0.43                      ...
+1       13961  G    T    ENPP1  0.18           -0.24                     0.017                     ...
+1       14118  G    C    ENPP1  0.7            0.058                     0.024                     ...
+1       14132  A    C    ENPP1  0.64           0.06                      0.035                     ...
+1       14926  C    T    ENPP1  0.31           -0.23                     0.011                     ...
+1       14935  A    T    ENPP1  0.63           0.091                     0.014                     ...
+1       14990  G    A    ENPP1  0.82           0.025                     0.052                     ...
+1       15016  G    A    ENPP1  0.81           -0.017                    0.13                      ...
+1       15091  A    T    ENPP1  0.53           0.094                     0.025                     ...
+```
+
+My question was whether or not converting this to a sqlite database would result in a smaller file.
+I created a new branch `sqlite` to run a small test with just the first 2000 lines of the matrix file.
+Used pandas `to_sql` in to convert the matrix to sqlite in the `utils.py` module and saw that the
+resulting sqlite database was actually ~9x larger than the original matrix file:
+
+- 2.2M    subset_matrix.tsv.gz
+-  17M    subset_matrix.tsv.sqlite
+- 2.7M    subset_matrix.tsv.sqlite.gz
+-  10M    subset_matrix.tsv
+
+I'm realizing this is because the sqlite file is not compressed while
+the original matrix file is. I checked this by gzipping the sqlite
+which brought it back down to near the size of the original matrix file.
+
+Actually even the unzipped TSV file is smaller than the sqlite file.
+I find this surprising since sqlite is binary and should be more efficient.
+
+I tried to melt the table to long-form to see if that would save space:
+```
+#chrom  pos     ref alt rsids   nearest_genes   phenotype           pval    beta    maf
+1       5753    G   A   NaN     ENPP1           1-3-Methylhistidine 0.980   -0.0012 0.430
+1       13961   G   T   NaN     ENPP1           1-3-Methylhistidine 0.180   -0.2400 0.017
+1       14118   G   C   NaN     ENPP1           1-3-Methylhistidine 0.700   0.0580  0.024
+1       14132   A   C   NaN     ENPP1           1-3-Methylhistidine 0.640   0.0600  0.035
+1       14926   C   T   NaN     ENPP1           1-3-Methylhistidine 0.310   -0.2300 0.011
+...	    ...	    ...	...	...	    ...	            ...	                ...	    ...	    ...
+```
+
+
+But it's way worse, which I guess makes sense since the chrom/pos/ref/alt
+are repeated for each phenotype in the long-form now.
+
+- 48M    subset_matrix.tsv.sqlite
+
+I should be able to normalize the database to save space by creating separate
+tables for the variants (chrom, pos, ref, alt, rsids), annotations (genes, etc), the
+phenotypes (phenotype), and the measurements (pval, beta, maf).
+
+```mermaid
+erDiagram
+    Variant {
+        int uid PK
+        string chrom
+        int pos
+        char ref
+        char alt
+        string[] rsids
+    }
+    Measurement {
+        int Variant PK,FK
+        int Phenotype PK,FK
+        float pval
+        float beta
+        float maf
+    }
+    Phenotype {
+        string Name PK
+        int Num-SNPs
+        int Num-Cases
+        int Num-Controls
+    }
+    Annotation {
+        string chrom
+        int start
+        int end
+        string name
+    }
+    Variant }|--|| Measurement : ""
+    Phenotype }|--|| Measurement : ""
+```
+
+In this way I can normalize the database and save space. I'm going to try and implement
+this in the `utils.py` module as a new function `convert_matrix_to_sqlite_normalized`.
+
+Ok I have the normalized database working, at least as a start,
+but it's still larger than the original matrix file:
+- 25M    subset_matrix.tsv.normalized.sqlite
+
+I even included a call to "VACUUM" in the `convert_matrix_to_sqlite_normalized` function
+to try and shrink the database, but it didn't help.
+
+Mar 11th 2025: Experimenting with fpdf2 to create a PDF report
+---
+I'm going to try and use the fpdf2 library to create a PDF report for Spheweb
+as an alternative to the HTML report. My concern is whether or not the PDF
+report will be too large, but I think it's worth trying.
+
+Key features I want to include in the PDF report:
+- Title page with the name of the phenotype that link to subsequent pages
+- Multiple pages of Manhattan plots with a table of the top variants below each plot
+
+To get started, I'm going to build the PDF from a subset of the matrix.tsv.gz file.
+
+I've succeeded in making a mock PDF with 300 pages of the same manhattan plot.
+This PDF is only 228K, but I think this is misleading because it's just a single image repeated.
+Also the image is currently a PNG, but ideally I would like to use a vector image format like SVG or PDF.
+Yes, SVG's are allowed: https://py-pdf.github.io/fpdf2/SVG.html
+
+Apr 18th 2025: Returning to fpdf2 experiments to figure out internal linking
+---
+Last month I was able to create a PDF with a single manhattan plot repeated 300 times
+from the `matrix.tsv.gz` file by creating a temporary command which is hardcoded to use a manhattan plot PNG:
+`spheweb matrix-to-pdf subset_matrix.tsv.gz`
+
+I'll keep using the hardcoded PNG because I want to figure out internal linking.
+Specifically I want to be able to link from the table of contents to the correct manhattan plot.
+Looking at the fpdf2 documentation, it looks like I can use the `add_link` method to create a link, and use it with "cell" as in:
+
+```python
+link = pdf.add_link(page=1)
+pdf.cell(text="Internal link to first page", border=1, link=link)
+```
+
+Apr 21st 2025: Internal linking in fpdf2
+---
+Same problem as before, where I won't know ahead of time what the page number is, so I need to use the `page_number()` method?
+
+Well, actually, can I create the PDF non-linearly? What I mean is can I create some pages,
+then go back and edit the prior pages?
+
+No, it turns out the answer is to use the `add_link` method to create named links to pages
+that don't exist yet, and save these links in a dictionary like:
+```python
+manhattan_links = {phenotype: pdf.add_link() for phenotype in phenotypes}
+```
+
+Then I can use the `set_link` method to set the current page to the link, again without having the page
+exist yet:
+```python
+with pdf.table() as table:
+    for phenotype in phenotypes:
+        row = table.row()
+        row.cell(phenotype, link=manhattan_links[phenotype])
+```
+
+Then finally, later I can use the `set_link` method to set the current page to the link:
+```python
+for phenotype in phenotypes:
+    pdf.add_page()
+    pdf.set_link(manhattan_links[phenotype], page=pdf.page_no())
+    pdf.cell(text="Link to first page", link=table_of_contents)
+    pdf.cell(200, 10, f"Manhattan plot for {phenotype}")
+    pdf.image("example_manhattan.png", x=10, y=20, w=180)
+```
+
+Got this working to create a PDF that can be jumped around inside, but it's currently very bare-bones
+and it's using the same placeholder PNG Manhattan plot image for every phenotype.
+
+Next steps are to:
+- Add a table of contents to go to the different views such as "phenotype", "variant", and "region"
+    - We'll just have "phenotype" actually working at this point
+- Expand the table of contents to go to the different manhattan plots to have "best variant" and other columns
+- Create a "render_manhattan_plot_SVG" function in `process.py` to create the SVG image from the matrix file
+- Use the `render_manhattan_plot_SVG` function to create the SVG image for each phenotype
+- Add a table of the top variants below each Manhattan plot
+
+The first step I'm going to do is to add an "overall" table of contents to the PDF.
+
+Ok, that was easy to do, I've just added an "About" page to the PDF so I could have the overall table of contents
+link to both the "About" and "Phenotype table" pages. I think this is a good start.
+
+I also expanded on the "Phenotype table" to include a header and additional columns, which are currently just
+placeholders. With this, the first two todo's are complete.
+
+The next step is to create the `render_manhattan_plot_SVG` function in `process.py` to create the SVG image from the matrix file.
+
+Ok, I've started looking through the code to try and understand what needs to be done to create SVGs and I think it's quite a lot.
+Currently the only Manhattan plot able to be generated is the legacy HTML plot which uses d3.js to create the plot.
+I don't want to have to use d3.js to create the SVG, so I was thinking of using plotly instead.
+
+However, right now the legacy binning uses JSON data in a format that I likely won't want to use.
+I guess as an intermediate step, I should create SVGs from the current legacy JSON datastructure.
+
+Ok, to summarize, I think the next step is to create
+a function `render_manhattan_plot_SVG` that takes the legacy JSON data from
+`legacy_binning.py` and creates an SVG image with plotly or matplotlib instead of d3.js.
+
+Here's the legacy data flow
+```mermaid
+graph LR;
+    pheno.csv -->| TabularParser + LegacyBinning | data.json
+    data.json -->| render_manhattan_plot + d3.js | index.html
+```
+
+Here's how we'll add the functionality to make SVGs
+```mermaid
+graph LR;
+    pheno.csv -->| TabularParser + LegacyBinning | data.json
+    data.json -->| render_manhattan_plot + d3.js | index.html
+    data.json -->| legacy_manhattan_plot_SVG + plotly/matplotlib | plot.svg
+```
+
+And ultimately I want to have a non-legacy binning and a new
+intermediate data format (or maybe none at all)
+
+```mermaid
+graph LR;
+    pheno.csv -->| TabularParser + LegacyBinning | data.json
+    data.json -->| render_manhattan_plot + d3.js | index.html
+
+    files.mlma? --> | TabularParser + SphewebBinning | intermediate?
+    intermediate? -->| render_manhattan_plot_SVG + plotly/matplotlib | plot.svg
+    data.json -->| legacy_manhattan_plot_SVG + plotly/matplotlib | plot.svg
+```
+
+And then I can remove the unnecessary steps in the legacy pipeline later
+
+Apr 22nd: Plotly Manhattan plot SVG
+---
+Creating plotly scatterplot from the JSON data created by the legacy binner.
+It was easy to create a scatterplot with plotly, and also easy to create a pandas
+dataframe from the JSON data, specifically using the "unbinned_variants" which are the
+stand-out variants.
+
+
+```python
+import plotly.express as px
+import pandas as pd
+import numpy as np
+import json
+
+json_path = "manhattan_from_gz.json"
+with open(json_path, "r") as f:
+    data = json.load(f)
+
+df = pd.DataFrame(data["unbinned_variants"])
+df["log10_pval"] = np.log10(df["pval"])
+
+# Use chromosome length to determine the position of each variant in "gobal position"
+
+
+fig = px.scatter(df, y="log10_pval", x="pos")
+fig.update_traces(marker_size=10)
+fig.show()
+```
+
+I realized though, that an issue was going to be creating a "global position" for the variants
+on different chromosomes, for example chromosome 2 needs to start at the end of chromosome 1, etc.
+
+I already have a Chromosome class, but it didn't have a length property, so I'm adding that as as side-project first
+
+Ok, I added the length property to the Chromosome class, and then got a very basic manhattan plot working with plotly,
+but I ran into errors trying to save it to SVG, something about a deprecation warning. So I switched to matplotlib for now
+
+I now have the save SVG getting generated for each phenotype, since I only have one "legacy JSON" data file right now.
+This has worked through the test_pdf, but it's really slow (taking almost and hour) to generate all 30 SVGs, and the total size
+is getting large. The test has 30 fake phenotypes, which takes up ~30MB. This is too large, and I think the SVGs are too large.
+I should be able to shrink them by plotting fewer points and maybe plotting boxes for background bins instead of points.
+
+I'm now trying to run the small example with 300 phenotypes, which will probably take too long:
+```bash
+spheweb matrix-to-sqlite subset_matrix.tsv
+```
+
+Yeah, it stalled out at ~20 SVGs.
+I'm going to temporarily switch back to using the same PNG for each phenotype manhattan plot
+
+Apr 23rd 2025: Improving and shrinking SVG size
+---
+Realized yesterday that I wasn't calling `plt.close()` after saving the SVG,
+so this was causing each consecutive plot to be added to the previous one which
+was really balooning the size of the SVGs. I fixed this and now all the SVGs are the same size
+and running the pytest with 30 phenotypes completes in 1 minute instead of 1 hour.
+
+Now I'm trying to re-run the example with 300 phenotypes:
+```bash
+spheweb matrix-to-sqlite subset_matrix.tsv
+```
+
+This succeeded and the generated `subset_matrix.pdf` is "only" 5.6M which is ok-ish.
+
+Ok, I've completed all the tasks I set on Apr 21st except for:
+- Add a table of the top variants below each Manhattan plot
+
+I think my next steps should be to create a synthetic data generator so that I can
+stop using adhoc local files. Being able to generate synthetic data will
+also allow me to test ways to shrink SVG size while maintaining the quality of the plot.
+- There's already a `matrix_gz_path` pytest fixture in `tests/conftest.py` that creates a synthetic matrix file
+  which is how the 30 phenotype test was created. Right now this creates random rows
+  - It would be good to lift this functionality into a module so I can use it on the command line and in tests
+- In PheWeb, the actual manhattan plots get generated from parsed TSV files, so I should
+  make a "legacy parsed data" generator that can be used as input to the legacy binning
+  - I already have a `test/pheno_data.csv` file that is used for testing the legacy binning
+  - But it would be better to have a generator rather than a static file
+  - This would allow me to create multiple "legacy parsed data" files with different characteristics
+
+May 13th 2025: Creating synthetic "mlma" data generators
+---
+
+The main input data for PheWeb are "GWAS summary statistics files" which, according to PheWeb need to
+have the following characteristics:
+
+1. It needs a header row.
+2. Columns can be delimited by tabs, spaces, or commas.
+3. It needs a column for the reference allele
+   (which must always match the bases on the reference genome that you specified with hg_build_number)\
+   and a column for the alternate allele. If you have a MARKER_ID column like
+   1:234_C/G, that's okay too. If you have an allele1 and allele2, and sometimes
+   one or the other is the reference, then you'll need to modify your files.
+4. It can be gzipped if you want.
+5. Variants must be sorted by chromosome and position, with chromosomes in the order [1-22,X,Y,MT].
+
+And the header row MUST have the following columns
+
+column description	| name	| other allowed column names	| allowed values
+--- | --- | --- | ---
+chromosome	| chrom	| #chrom, chr	| 1-22, X, Y, M, MT, chr1, etc
+position	| pos	| beg, begin, bp	| integer
+reference allele	| ref	| reference	| must match reference genome
+alternate allele	| alt	| alternate	| anything
+p-value	| pval	| pvalue, p, p.value	| number in [0,1]
+
+I've already created small versions of these files for testing the parsing utilities like:
+
+```python
+"""Test CSVParser with a TSV."""
+tsv_file = tmp_path / "test.tsv"
+tsv_file.write_text(
+    "chromosome\tposition\tref\talt\tpval\n"
+    "1\t1000\tA\tT\t0.01\n"
+    "2\t2000\tC\tG\t0.23\n"
+)
+```
+
+which is good, but I also want/need tools to produce "entire" GWAS summary statistics files
+so that I can do larger scale tests and timing tests for parsing and processing realistically
+sized files.
+
+I think I want to put this functionality in `utils.py` and then maybe reference it in conftest.py.
+This is because I want to make it available as a CLI sub-command to generate one of these files.
+
+Ok, I've made a first-pass that generates really basic synthetic files that all have the same exact
+data for different SNPs! Even this took a while because I wanted to keep test coverage > 80% and
+I did a fair amount of refactoring as well as making this functionality available at the CLI.
+
+Next steps are:
+- Create INTERESTING synthetic tabular data files for Manhattan plots
+- Write Manhattan plotting code, maybe using `drawsvg2`?, keeping file size in mind
+    - Might require first processing of phenotype mlma files with Binning
+    - Or directly create plot from the mlma file?
+    - Maybe output to PNG instead of SVG? Run tests
+    - Highlight significant loci/regions since PDF doesn't have hover-utility
+- Speedup tests, starting to get slow
+
+July 8th 2025: Investigating d3 Manhattan plotting code
+---
+
+Currently there is a `render_manhattan_plot` function in `process.py` that uses
+the d3 javascript library with the `manhattan.html` jinja2 template to create a .html
+file with the manhattan plot and the data embedded.
+
+There is a good description of the current state of manhattan plotting
+from the prior note on `Apr 21st` which also includes nice flowcharts.
+
+I thought I had a novel idea to plot background shapes instead of individual points
+for the insignificant `variant_bins` data in the legacy JSON, but it turns out that
+the d3 code already does this. The way that the `manhattan.html` d3 code does
+this is by creating a "background" layer of rectangles that represent the bins:
+
+```javascript
+bins.selectAll('circle.binned_variant_line')
+    .data(_.property('qval_extents'))
+    .enter()
+    .append('line')
+    .attr('class', 'binned_variant_line')
+    .attr('x1', function (d, i) {
+        var parent_i = +this.parentNode.getAttribute('data-index');
+        return variant_bins[parent_i].x;
+    })
+    .attr('x2', function (d, i) {
+        const parent_i = +this.parentNode.getAttribute('data-index');
+        return variant_bins[parent_i].x;
+    })
+    .attr('y1', function (d) { return y_scale(d[0]); })
+    .attr('y2', function (d) { return y_scale(d[1]); })
+    .style('stroke', function (d, i) {
+        var parent_i = +this.parentNode.getAttribute('data-index');
+        return variant_bins[parent_i].color;
+    })
+    .style('stroke-width', 4.6)
+    .style('stroke-linecap', 'round');
+```
+
+The code uses d3's `line` to make rectangles with the `x1`, `x2`, `y1`, and `y2` attributes.
+The data used here is the `qval_extents` from the `variant_bins` data, which is a list of pairs
+of q-values such as `[[0.05, 2.85], [3.35, 3.45]]`. These are used for the `y1` and `y2` attributes
+since a q-value is the y-axis of the manhattan plot, -log10(p-value) in this case.
+
+Strangely the `x1` and `x2` attributes are both set to the same value, which is the x-coordinate of the bin,
+which is calculated from the `variant_bins` data which ultimately comes from the `pos` key of the variant_bins.
+
+Here's what the normal d3 manhattan plot looks like with the background bins:
+![](dev_notes_images/20250708_d3_manhattan_with_background_rects.png)
+
+And here's what the SVG looks like without the background bins by commenting out the d3 code above:
+![](dev_notes_images/20250708_d3_manhattan_no_background_rects.png)
+
+The HTML file produced in either case is 164K, because whether or not we plot the background bins,
+the d3 code and embedded data is still the same. I'm similarly not expecting the SVGs to get larger
+when I add the background bins.
+
+One other note is that the d3 code also creates d3 `circle` elements for the binned variants:
+```javascript
+                bins.selectAll('circle.binned_variant_point')
+                    .data(_.property('qvals'))
+                    .enter()
+                    .append('circle')
+                    .attr('class', 'binned_variant_point')
+                    .attr('cx', function (d, i) {
+                        var parent_i = +this.parentNode.getAttribute('data-index');
+                        return variant_bins[parent_i].x;
+                    })
+                    .attr('cy', function (qval) {
+                        return y_scale(qval);
+                    })
+                    .attr('r', 2.3)
+                    .style('fill', function (d, i) {
+                        var parent_i = +this.parentNode.getAttribute('data-index');
+                        return variant_bins[parent_i].color;
+                    });
+```
+
+I've tried turning this on and off and I see only minor differences in the plot:
+![](dev_notes_images/20250708_d3_manhattan_with_background_without_binned_variant_points.png)
+
+Oh wait, I had misunderstood the d3 `line` code. I thought it was drawing large background rectangles
+to cover the entire insignificant regions, but it's actually drawing small lines for each set of grouped
+variants, which may be significant! I noticed this as I wrote the SVG code to do the same thing.
+
+July 8th 2025: Attempting to decrease d3 data-embedded Manhattan plot html files
+---
+
+I'm still open to the idea of using the d3.js library to create the manhattan plots,
+but unlike standard pheweb, I want to embed the data in the HTML file so that it can be
+run as a static HTML file, without needing a web server.
+
+Currently at ~164K, the HTML file is too large to be practical for sharing with others,
+especially if I want to generate 1000 phenotypes. The `dd_weight_lbs.json` file is 164K
+and makes up the vast majority of the size of the `manhattan.html` file when embedded.
+
+I should be able to reduce the size of the JSON by using a different data structure.
+Currently the data takes the form of a list of dictionaries, where each dictionary
+represents a binned or unbinned variant and all of the associated data:
+```json
+{
+    "variant_bins": [
+        {
+            "chrom": "1",
+            "qvals": [3.05, 3.65, 3.95],
+            "qval_extents": [[0.05, 2.85], [3.35, 3.45]],
+            "pos": 1500000
+        },
+        ...
+    ],
+    "unbinned_variants": [
+        {
+            "chrom": "15",
+            "pos": 41521885,
+            "ref": "T",
+            "alt": "C",
+            "rsid": "",
+            "nearest_genes": ["IGF1"],
+            "pval": 9e-50,
+            "beta": -0.15,
+            "maf": 0.48,
+            "num_significant_in_peak": 290,
+            "peak": true
+        },
+        ...
+    ]
+}
+```
+
+This results in a lot of repeated keys like "chrom", "pos", "ref", "alt", etc.
+I should be able to reduce the size of the JSON by using a different data structure,
+such as a dictionary of lists, where the keys are the column names and the values
+are lists of values for each column.
+
+```json
+{
+    "variant_bins": {
+        "chrom": ["1", "1", "1", ...],
+        "qvals": [[3.05, 3.65, 3.95], [2.05, 2.65, 2.95], ...],
+        "qval_extents": [[0.05, 2.85], [3.35, 3.45], ...],
+        "pos": [1500000, 1600000, ...]
+    },
+    "unbinned_variants": {
+        "chrom": ["15", "15", ...],
+        "pos": [41521885, 41521890, ...],
+        "ref": ["T", "C", ...],
+        "alt": ["C", "G", ...],
+        "rsid": ["", "", ...],
+        "nearest_genes": [["IGF1"], ["IGF2"], ...],
+        "pval": [9e-50, 1e-20, ...],
+        "beta": [-0.15, 0.02, ...],
+        "maf": [0.48, 0.12, ...],
+        "num_significant_in_peak": [290, 150, ...],
+        "peak": [true, false, ...]
+    }
+}
+```
+
+I'm going to test this with a quick python script:
+```python
+import json
+
+json_data_path = "../dd_weight_lbs.json"
+
+with open(json_data_path, 'r') as file:
+    data = json.load(file)
+
+# Convert the data from list of dicts to dict of lists
+data_dict = {}
+for bin_kind,list_of_dict in data.items():
+
+    # Get all possible keys for this type of bin_kind
+    bin_kind_fields = set()
+    for d in list_of_dict:
+        for k in d.keys():
+            bin_kind_fields.add(k)
+
+    # Initialize the data_dict for this bin_kind
+    data_dict[bin_kind] = {field: [] for field in bin_kind_fields}
+
+    # Populate the data_dict for this bin_kind
+    for d in list_of_dict:
+        for field in bin_kind_fields:
+            if field in d:
+                data_dict[bin_kind][field].append(d[field])
+            else:
+                data_dict[bin_kind][field].append(None)
+
+# Write the transformed data to a new JSON file
+output_json_path = "../dd_weight_lbs_transformed.json"
+with open(output_json_path, 'w') as output_file:
+    json.dump(data_dict, output_file, indent=None, separators=(',', ':'))
+```
+
+Unfortunately, I only save ~30K, as the new JSON is 134K instead of 164K.
+
+Another idea is to create all ~1000 of the ~150K manhattan_pheno_X.html files
+but then gzip them, which reduces the size to 32K in this test. Then if you had
+1000 of these, it would be 32M, which is still large, but not too large.
+And when you unzip them it would take a total of 164M of disk space, which isn't too bad.
+
+You'd probably get even better compression if you tar/gzip them together since there
+is repetition in the files as they have the same javascript and HTML.
+
+July 8th 2025: Improve SVG Manhattan plotting code
+---
+
+I just wanted to take a step back and think about why I'd want to have SVG
+output for the manhattan plot, rather than embedded HTML. I think the main reason
+is that I want to be able to generate a PDF report with the manhattan plots. Also
+the embedded HTML's might require a lot of space. For example the example `manhattan.html`
+I created is 164K, which is rather large if I want to have 1000 phenotypes. 164M is too big to email,
+but maybe that's setting the bar too high. Also as discussed earlier, we could gzip down to ~30M maybe.
+The SVGs are currently only 88K which is a similar size. They currently look worse than the d3 plots.
+
+A downside of the SVGs is that they don't easily allow for interactivity like the d3
+HTML approach such as hovering over points to see the variant information.
+I do not know if this is possible with SVGs loaded in a browser.
+
+Currently `render_manhattan_plot_SVG_from_legacy_JSON_data` in `process.py` is
+using the legacy JSON data from `legacy_binning.py` to create a manhattan plot SVG.
+The current approach uses matplotlib to create the SVG, but is only using
+the "unbinned_variants" data, which is a subset of the variants that have significant p-values.
+
+For interactive testing I have created a hidden command line utility subcommand
+`spheweb svg_manhattan` that takes a path to a legacy JSON file and generates a manhattan plot SVG.
+I'm using it with `spheweb svg-manhattan test_svgs/ dd_weight_lbs.json`. Here's the 88K sized image it generates:
+![dd_weight_lbs.svg](dev_notes_images/20250708_manhattan_no_background.png)
+
+I've been able to easily add the background bins to the SVG by using the `patches` module in matplotlib.
+This is similar to the d3 code that draws the background bins, but instead of using `line` elements, it uses many
+small `Rectangle` patches.
+
+Here's what the SVG looks like with the background bins:
+![](dev_notes_images/20250708_svg_manhattan_with_background.png)
+
+I made it very wide, but it otherwise matches the d3 plot, which is good.
+What's not good is that the SVG is now 520K, which is much larger than the 88K SVG without the background bins
+and the 164K d3 data-embedded HTML file.
+
+**Next steps:**
+* Shrink the SVG size by plotting fewer points and Rectangle patches for the background bins.
+* Consider what data format I'd like to use rather than the legacy JSON.
+* Think of an approach where I'd be able to scale up or down the resolution and size of the SVG.
+* Add gene names to the most significant variants in the SVG
+* Highlight significant loci/regions in the SVG since PDF doesn't have hover-utility.
