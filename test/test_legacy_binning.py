@@ -17,6 +17,7 @@ def test_generate_legacy_manhattan_data(tmp_path: Path) -> None:
     process.generate_legacy_manhattan_json(
         data_file,
         out_file,
+        assembly="canFam4",
     )
 
     with open(out_file) as f, open(ground_truth) as g:

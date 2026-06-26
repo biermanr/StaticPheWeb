@@ -18,14 +18,14 @@ from . import chromosomes, legacy_binning, parsing
 
 
 def generate_legacy_manhattan_json(
-    data_file: Path, json_out: Path, delim: str = ","
+    data_file: Path, json_out: Path, assembly: str, delim: str = ","
 ) -> None:
     """Generate data for a Manhattan plot from a data file using legacy PheWeb binning.
 
     Outputs a JSON file with the binned data.
     """
-    binner = legacy_binning.LegacyBinner()
-    chroms = chromosomes.get_premade_assembly_chroms("canfam4")
+    chroms = chromosomes.get_premade_assembly_chroms(assembly)
+    binner = legacy_binning.LegacyBinner(chrom_order=[c.name for c in chroms])
     parser = parsing.TabularParser(chroms, data_file, delim)
     data = binner.bin(parser)
 
@@ -47,7 +47,7 @@ def render_manhattan_plot(out_dir: Path, data: dict[str, Any]) -> None:
 
 
 def render_manhattan_plot_SVG_from_legacy_JSON_data(
-    out_dir: Path, data: dict[str, Any], phenotype: str
+    out_dir: Path, data: dict[str, Any], phenotype: str, assembly: str
 ) -> None:
     """Create an SVG file for a Manhattan plot using legacy JSON data.
 
@@ -76,17 +76,17 @@ def render_manhattan_plot_SVG_from_legacy_JSON_data(
     df["-log10_pval"] = -np.log10(df["pval"])
 
     # Use chromosome length to determine the position of each variant in "gobal position"
-    dog_chroms = chromosomes.get_premade_assembly_chroms("canFam4")  # NOTE HARD CODED!
+    assembly_chroms = chromosomes.get_premade_assembly_chroms(assembly)
     chrom_colors = {
         0: "#7878ba",
         1: "#004242",
     }
-    chrom_order = {chrom.name: i for i, chrom in enumerate(dog_chroms)}
+    chrom_order = {chrom.name: i for i, chrom in enumerate(assembly_chroms)}
 
     chrom_offsets = {}
     running_offset = 0
     chrom_spacing = 50_000_000
-    for chrom in dog_chroms:
+    for chrom in assembly_chroms:
         chrom_offsets[chrom.name] = running_offset
         running_offset += chrom.length + chrom_spacing
 
@@ -127,12 +127,12 @@ def render_manhattan_plot_SVG_from_legacy_JSON_data(
 
     # Adjust the x-ticks to show chromosome positions
     xticks = []
-    for chrom in dog_chroms:
+    for chrom in assembly_chroms:
         start_pos = chrom_offsets[chrom.name]
         end_pos = start_pos + chrom.length
         xticks.append((start_pos + end_pos) / 2)
 
-    plt.xticks(xticks, [chrom.name for chrom in dog_chroms])
+    plt.xticks(xticks, [chrom.name for chrom in assembly_chroms])
 
     # Adjust y-limits to start at 0
     plt.ylim(bottom=0)
@@ -144,8 +144,14 @@ def render_manhattan_plot_SVG_from_legacy_JSON_data(
     plt.close()
 
 
-def render_pdf(matrix_tsv_gz_path: pathlib.Path) -> pathlib.Path:
+def render_pdf(
+    matrix_tsv_gz_path: pathlib.Path, assembly: str = "canFam4"
+) -> pathlib.Path:
     """Write a PDF file from a Matrix TSV GZ file.
+
+    EXPERIMENTAL: the per-phenotype tables and Manhattan inputs are placeholder
+    data, not yet wired to the real binned values. Kept as a secondary snapshot
+    path only (see plans/v1-static-bundle.md).
 
     Args:
     ----
@@ -339,7 +345,10 @@ def render_pdf(matrix_tsv_gz_path: pathlib.Path) -> pathlib.Path:
         }
 
         render_manhattan_plot_SVG_from_legacy_JSON_data(
-            out_dir=pathlib.Path("svgs"), data=data, phenotype=phenotype
+            out_dir=pathlib.Path("svgs"),
+            data=data,
+            phenotype=phenotype,
+            assembly=assembly,
         )
         pdf.image(f"svgs/{phenotype}.svg", x=10, y=20, w=180)
 

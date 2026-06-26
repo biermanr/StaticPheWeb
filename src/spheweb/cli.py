@@ -116,11 +116,11 @@ def synthetic_dataset(ref, out, num_phenos, num_variants, seed) -> None:
 @spheweb.command(hidden=True)
 @click.argument("out_dir", type=Path)
 @click.argument("json_file", type=Path)
-def svg_manhattan(out_dir, json_file) -> None:
+@click.option(
+    "--ref", "-r", type=str, required=True, help="Chromosome assembly, such as hg19."
+)
+def svg_manhattan(out_dir, json_file, ref) -> None:
     """Create a Manhattan plot SVG from legacy JSON data."""
-    # Create an pheweb.html file which contains the HTML/CSS/JS/DATA for the pheweb
-    # visualization using jinja2 with a template
-
     with open(json_file) as f:
         data = json.load(f)
 
@@ -128,6 +128,7 @@ def svg_manhattan(out_dir, json_file) -> None:
         out_dir,
         data,
         "test_phenotype",
+        assembly=ref,
     )
 
 

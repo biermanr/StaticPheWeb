@@ -93,6 +93,7 @@ def test_render_manhattan_plot_SVG_from_legacy_JSON_data(
         out_dir,
         data,
         phenotype="test",
+        assembly="canFam4",
     )
 
     assert out_dir.joinpath("test.svg").exists()
