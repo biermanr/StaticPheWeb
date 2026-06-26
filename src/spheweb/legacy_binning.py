@@ -11,8 +11,13 @@ from . import binning, parsing
 class LegacyBinner(binning.Binner):
     """PheWeb-style binning of SNPs."""
 
-    def __init__(self) -> None:
-        """Initialize the binner."""
+    def __init__(self, chrom_order: Optional[list[str]] = None) -> None:
+        """Initialize the binner.
+
+        ``chrom_order`` is the ordered list of chromosome names to bin against
+        (e.g. from an assembly). When omitted it defaults to the dog (canFam4)
+        numeric chromosomes, preserving the byte-for-byte PheWeb parity fixture.
+        """
         self._peak_best_variant: Optional[dict[str, Any]] = None
         self._peak_last_chrpos: tuple[str, int] = ("", 0)
         self._peak_pq: MaxPriorityQueue = MaxPriorityQueue()
@@ -36,51 +41,10 @@ class LegacyBinner(binning.Binner):
         self.manhattan_peak_max_count = 500
         self.manhattan_num_unbinned = 500
 
-        # chrom_order_list = [str(i) for i in range(1,22+1)] + ['X', 'Y', 'MT'] #RB hardcoding dog chrs
-        chrom_order_list = [
-            "1",
-            "2",
-            "3",
-            "4",
-            "5",
-            "6",
-            "7",
-            "8",
-            "9",
-            "10",
-            "11",
-            "12",
-            "13",
-            "14",
-            "15",
-            "16",
-            "17",
-            "18",
-            "19",
-            "20",
-            "21",
-            "22",
-            "23",
-            "24",
-            "25",
-            "26",
-            "27",
-            "28",
-            "29",
-            "30",
-            "31",
-            "32",
-            "33",
-            "34",
-            "35",
-            "36",
-            "37",
-            "38",
-            "39",
-        ]
-        self.chrom_order = {
-            chrom: index for index, chrom in enumerate(chrom_order_list)
-        }
+        if chrom_order is None:
+            # Default to canFam4 numeric chromosomes (preserves the parity fixture).
+            chrom_order = [str(i) for i in range(1, 39 + 1)]
+        self.chrom_order = {chrom: index for index, chrom in enumerate(chrom_order)}
 
     def bin(self, parser: parsing.Parser) -> dict[str, Any]:
         """Perform PheWeb binning."""

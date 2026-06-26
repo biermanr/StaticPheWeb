@@ -83,6 +83,36 @@ def synthetic_gwas(ref, output) -> None:
     click.echo(f"Synthetic data created at {output}")
 
 
+@spheweb.command()
+@click.option(
+    "--ref",
+    type=str,
+    required=True,
+    help="Reference genome, such as hg19, grch38, or canFam4.",
+)
+@click.option(
+    "--out",
+    type=Path,
+    required=True,
+    help="Output directory for the synthetic dataset.",
+)
+@click.option("--num-phenos", type=int, default=3, help="Number of phenotypes.")
+@click.option("--num-variants", type=int, default=200, help="Variants per chromosome.")
+@click.option("--seed", type=int, default=0, help="Seed for reproducible output.")
+def synthetic_dataset(ref, out, num_phenos, num_variants, seed) -> None:
+    """Create a PheWeb-style dataset (pheno-list.json + per-phenotype assoc files)."""
+    try:
+        chroms = chromosomes.get_premade_assembly_chroms(ref)
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
+
+    pheno_list_path = utils.create_synthetic_dataset(
+        chroms, num_phenos, num_variants, out, seed=seed
+    )
+
+    click.echo(f"Synthetic dataset created, pheno-list at {pheno_list_path}")
+
+
 @spheweb.command(hidden=True)
 @click.argument("out_dir", type=Path)
 @click.argument("json_file", type=Path)
