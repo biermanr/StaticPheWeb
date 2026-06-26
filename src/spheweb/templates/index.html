@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>spheweb</title>
+    <style>
+        body {
+            font-family: -apple-system, system-ui, sans-serif;
+            margin: 1.5rem auto;
+            max-width: 1100px;
+            padding: 0 1rem;
+            color: #222;
+        }
+
+        h1 {
+            margin-bottom: 0.25rem;
+        }
+
+        #search {
+            width: 100%;
+            padding: 0.5rem;
+            font-size: 1rem;
+            box-sizing: border-box;
+            margin: 0.5rem 0 1rem;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.95rem;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 0.35rem 0.6rem;
+            border-bottom: 1px solid #e2e2e2;
+        }
+
+        #pheno_table tbody tr {
+            cursor: pointer;
+        }
+
+        #pheno_table tbody tr:hover {
+            background: #f3f6ff;
+        }
+
+        #pheno_table tbody tr.selected {
+            background: #e2ecff;
+        }
+
+        #plot_title:empty {
+            display: none;
+        }
+
+        .d3-tip {
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 6px 8px;
+            border-radius: 3px;
+            font-size: 0.8rem;
+            line-height: 1.2;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Phenotypes</h1>
+    <p>Search and click a phenotype to view its Manhattan plot.</p>
+
+    <input id="search" type="text" placeholder="Filter by phenotype name or chrom:pos…" autocomplete="off">
+
+    <table id="pheno_table">
+        <thead>
+            <tr>
+                <th>Phenotype</th>
+                <th>Top hit</th>
+                <th>P-value</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <h2 id="plot_title"></h2>
+    <div id="manhattan_plot_container"></div>
+    <div id="variants_table_container"></div>
+
+    <script src="vendor/d3.min.js"></script>
+    <script src="vendor/d3-tip.min.js"></script>
+    <script src="vendor/underscore-min.js"></script>
+    <script src="spheweb.js"></script>
+    <script>
+        "use strict";
+
+        var phenos = [];
+
+        function topHit(p) {
+            return p.top_chrom != null ? p.top_chrom + ":" + p.top_pos : "—";
+        }
+
+        function fmtPval(v) {
+            return v == null ? "—" : v.toExponential(2);
+        }
+
+        function renderList(items) {
+            var tbody = document.querySelector("#pheno_table tbody");
+            tbody.innerHTML = "";
+            items.forEach(function (p) {
+                var tr = document.createElement("tr");
+                tr.innerHTML =
+                    "<td>" + (p.phenostring || p.phenocode) + "</td>" +
+                    "<td>" + topHit(p) + "</td>" +
+                    "<td>" + fmtPval(p.top_pval) + "</td>";
+                tr.addEventListener("click", function () {
+                    document.querySelectorAll("#pheno_table tbody tr").forEach(function (row) {
+                        row.classList.remove("selected");
+                    });
+                    tr.classList.add("selected");
+                    loadPheno(p);
+                });
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderVariantTable(data) {
+            var rows = (data.unbinned_variants || [])
+                .slice()
+                .sort(function (a, b) { return a.pval - b.pval; })
+                .map(function (v) {
+                    return "<tr>" +
+                        "<td>" + v.chrom + ":" + v.pos + " " + v.ref + "/" + v.alt + "</td>" +
+                        "<td>" + (v.maf == null ? "—" : v.maf.toExponential(2)) + "</td>" +
+                        "<td>" + v.pval.toExponential(2) + "</td>" +
+                        "</tr>";
+                })
+                .join("");
+            document.getElementById("variants_table_container").innerHTML =
+                "<table><thead><tr><th>Variant</th><th>MAF</th><th>P-value</th></tr></thead>" +
+                "<tbody>" + rows + "</tbody></table>";
+        }
+
+        function loadPheno(p) {
+            fetch("data/" + p.phenocode + ".json")
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    document.getElementById("plot_title").textContent =
+                        p.phenostring || p.phenocode;
+                    window.spheweb.renderManhattan("manhattan_plot_container", data);
+                    renderVariantTable(data);
+                });
+        }
+
+        document.getElementById("search").addEventListener("input", function (e) {
+            var q = e.target.value.toLowerCase();
+            renderList(phenos.filter(function (p) {
+                return (
+                    (p.phenostring || "").toLowerCase().indexOf(q) !== -1 ||
+                    (p.phenocode || "").toLowerCase().indexOf(q) !== -1 ||
+                    topHit(p).toLowerCase().indexOf(q) !== -1
+                );
+            }));
+        });
+
+        fetch("phenotypes.json")
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                phenos = data;
+                renderList(phenos);
+            });
+    </script>
+</body>
+
+</html>

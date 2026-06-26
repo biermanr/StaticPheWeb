@@ -128,6 +128,9 @@ def render_manhattan_plot(out_dir: Path, data: dict[str, Any]) -> None:
     with out_dir.joinpath("manhattan.html").open("w") as out_file:
         out_file.write(rendered)
 
+    # manhattan.html loads the shared renderer + vendored libs by relative path.
+    _copy_site_assets(out_dir)
+
 
 def render_manhattan_plot_SVG_from_legacy_JSON_data(
     out_dir: Path, data: dict[str, Any], phenotype: str, assembly: str

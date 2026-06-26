@@ -32,3 +32,10 @@ def test_build_static_site(tmp_path: pytest.fixture) -> None:
     # The whole point of the shared-asset model: no per-phenotype HTML.
     assert list(site.glob("data/*.json"))
     assert not list(site.rglob("data/*.html"))
+
+    # Shared assets are copied once.
+    assert (site / "index.html").exists()
+    assert (site / "spheweb.js").exists()
+    assert (site / "vendor" / "d3.min.js").exists()
+    assert (site / "vendor" / "underscore-min.js").exists()
+    assert (site / "vendor" / "d3-tip.min.js").exists()
