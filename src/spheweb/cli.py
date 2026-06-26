@@ -164,10 +164,3 @@ def svg_manhattan(out_dir, json_file, ref) -> None:
         "test_phenotype",
         assembly=ref,
     )
-
-
-@spheweb.command(hidden=True)
-@click.argument("matrix_tar_gz", type=Path)
-def matrix_to_sqlite(matrix_tar_gz) -> None:
-    """Convert a matrix.tar.gz file to a SQLite database."""
-    utils.convert_tsv_gz_to_normalized_sqlite(matrix_tar_gz)

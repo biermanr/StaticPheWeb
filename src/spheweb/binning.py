@@ -16,18 +16,3 @@ class Binner(ABC):
         This method should be implemented by subclasses to perform the actual binning.
         """
         pass
-
-
-class WindowBinner(Binner):
-    """Simple window-based binning of SNPs."""
-
-    def __init__(self, window_size: int):
-        """Initialize the window binner with a window size."""
-        self.window_size = window_size
-
-    def bin(self, parser: parsing.Parser) -> dict[str, Any]:
-        """Perform the binning of SNPs into windows."""
-        # for variant in parser:
-        #    pass
-
-        return {"TODO": "implement"}

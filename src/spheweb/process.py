@@ -137,6 +137,10 @@ def render_manhattan_plot_SVG_from_legacy_JSON_data(
 ) -> None:
     """Create an SVG file for a Manhattan plot using legacy JSON data.
 
+    EXPERIMENTAL: matplotlib SVG path used only by the secondary PDF snapshot
+    (see plans/v1-static-bundle.md). Not part of the interactive static site;
+    do not extend.
+
     Goal is to create a .svg file using plotly from the JSON structured data from the legacy
     binning approach which has the following form:
 
