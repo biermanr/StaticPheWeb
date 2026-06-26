@@ -15,18 +15,52 @@ def spheweb() -> None:
     pass
 
 
-@spheweb.command()
+@spheweb.group()
+def build() -> None:
+    """Build static outputs (interactive site, single page, or PDF) from GWAS data."""
+
+
+@build.command("static-content")
+@click.option(
+    "--phenos",
+    type=Path,
+    required=True,
+    help="PheWeb-style pheno-list.json mapping phenotypes to association files.",
+)
+@click.option(
+    "--ref", "-r", type=str, required=True, help="Chromosome assembly, such as hg19."
+)
+@click.option(
+    "--out", type=Path, required=True, help="Output directory for the static site."
+)
+@click.option(
+    "--delim", "-d", default="\t", type=str, help="Association-file delimiter."
+)
+def build_static_content(phenos, ref, out, delim) -> None:
+    """Build a searchable static site with per-phenotype Manhattan plots."""
+    process.build_static_site(phenos, ref, out, delim=delim)
+    click.echo(f"Static site written to {out}")
+
+
+@build.command("single", hidden=True)
 @click.argument("out_dir", type=Path)
 @click.argument("json_file", type=Path)
-def build(out_dir, json_file) -> None:
-    """Parse inputs to generate a static pheweb visualization."""
-    # Create an pheweb.html file which contains the HTML/CSS/JS/DATA for the pheweb
-    # visualization using jinja2 with a template
-
+def build_single(out_dir, json_file) -> None:
+    """Render a single Manhattan page from one binned JSON file."""
     with open(json_file) as f:
         data = json.load(f)
 
     process.render_manhattan_plot(out_dir, {"data": data})
+
+
+@build.command("pdf", hidden=True)
+@click.argument("matrix_tar_gz", type=Path)
+@click.option(
+    "--ref", "-r", type=str, default="canFam4", help="Chromosome assembly, such as hg19."
+)
+def build_pdf(matrix_tar_gz, ref) -> None:
+    """Render an (experimental) PDF snapshot report from a matrix.tsv.gz."""
+    process.render_pdf(matrix_tar_gz, assembly=ref)
 
 
 @spheweb.command()
@@ -137,10 +171,3 @@ def svg_manhattan(out_dir, json_file, ref) -> None:
 def matrix_to_sqlite(matrix_tar_gz) -> None:
     """Convert a matrix.tar.gz file to a SQLite database."""
     utils.convert_tsv_gz_to_normalized_sqlite(matrix_tar_gz)
-
-
-@spheweb.command(hidden=True)
-@click.argument("matrix_tar_gz", type=Path)
-def matrix_to_pdf(matrix_tar_gz) -> None:
-    """Convert a matrix.tar.gz file to a PDF report."""
-    process.render_pdf(matrix_tar_gz)

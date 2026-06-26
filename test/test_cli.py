@@ -80,6 +80,33 @@ def test_synthetic_gwas_data(tmp_path):
     assert output_path.exists()
 
 
+def test_build_static_content(tmp_path):
+    """The build static-content command produces a site from a pheno-list.json."""
+    chroms = chromosomes.get_premade_assembly_chroms("hg19")
+    pheno_list = utils.create_synthetic_dataset(
+        chroms, num_phenotypes=2, num_variants=40, out_dir=tmp_path / "input", seed=5
+    )
+
+    out = tmp_path / "site"
+    result = runner.invoke(
+        cli,
+        [
+            "build",
+            "static-content",
+            "--phenos",
+            str(pheno_list),
+            "--ref",
+            "hg19",
+            "--out",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert (out / "index.html").exists()
+    assert (out / "phenotypes.json").exists()
+    assert (out / "data" / "pheno0.json").exists()
+
+
 def test_validate_input(tmp_path):
     """Test the validate_input command."""
     data_path = tmp_path / "synthetic_data.tsv"
