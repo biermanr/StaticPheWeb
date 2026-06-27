@@ -3,7 +3,7 @@
 import heapq
 import math
 from collections.abc import Iterable
-from typing import Any, Optional
+from typing import Any
 
 from . import binning, parsing
 
@@ -11,14 +11,14 @@ from . import binning, parsing
 class LegacyBinner(binning.Binner):
     """PheWeb-style binning of SNPs."""
 
-    def __init__(self, chrom_order: Optional[list[str]] = None) -> None:
+    def __init__(self, chrom_order: list[str] | None = None) -> None:
         """Initialize the binner.
 
         ``chrom_order`` is the ordered list of chromosome names to bin against
         (e.g. from an assembly). When omitted it defaults to the dog (canFam4)
         numeric chromosomes, preserving the byte-for-byte PheWeb parity fixture.
         """
-        self._peak_best_variant: Optional[dict[str, Any]] = None
+        self._peak_best_variant: dict[str, Any] | None = None
         self._peak_last_chrpos: tuple[str, int] = ("", 0)
         self._peak_pq: MaxPriorityQueue = MaxPriorityQueue()
         self._unbinned_variant_pq: MaxPriorityQueue = MaxPriorityQueue()

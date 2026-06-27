@@ -56,7 +56,11 @@ def build_single(out_dir, json_file) -> None:
 @build.command("pdf", hidden=True)
 @click.argument("matrix_tar_gz", type=Path)
 @click.option(
-    "--ref", "-r", type=str, default="canFam4", help="Chromosome assembly, such as hg19."
+    "--ref",
+    "-r",
+    type=str,
+    default="canFam4",
+    help="Chromosome assembly, such as hg19.",
 )
 def build_pdf(matrix_tar_gz, ref) -> None:
     """Render an (experimental) PDF snapshot report from a matrix.tsv.gz."""
