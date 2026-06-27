@@ -15,3 +15,9 @@ sandbox/
 !dev_notes_images/*.png
 *.svg
 *.pdf
+
+# Docs + demo build output
+_site/
+_demo_src/
+/site/
+/demo/

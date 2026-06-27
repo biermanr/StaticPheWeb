@@ -13,7 +13,7 @@ dependencies = [
   "fpdf2",
   "matplotlib",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
   {name = "Rob Bierman", email = "rbierman@princeton.edu"},
 ]
@@ -25,7 +25,6 @@ classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
   "License :: OSI Approved :: MIT License",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -43,6 +42,9 @@ dev = [
   "mypy",
   "ruff",
 ]
+docs = [
+  "mkdocs-material",
+]
 
 [tool.uv.build-backend]
 module-root = "src"
@@ -58,6 +60,14 @@ check = [
   { ref = "lint" },
   { ref = "typecheck" },
   { ref = "test" },
+]
+docs = "mkdocs build --strict"
+docs-serve = "mkdocs serve"
+# Reproduce the deployed demo locally: docs to _site/, example pheweb to _site/demo/.
+demo = [
+  { cmd = "mkdocs build --strict -d _site" },
+  { cmd = "spheweb synthetic-dataset --ref hg19 --out _demo_src --seed 0 --num-phenos 6" },
+  { cmd = "spheweb build static-content --phenos _demo_src/pheno-list.json --ref hg19 --out _site/demo" },
 ]
 
 [tool.pytest.ini_options]

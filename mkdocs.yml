@@ -1,0 +1,43 @@
+site_name: StaticPheWeb
+site_description: Generate static, server-free websites from GWAS results.
+site_url: https://biermanr.github.io/StaticPheWeb/
+repo_url: https://github.com/biermanr/StaticPheWeb
+repo_name: biermanr/StaticPheWeb
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Tutorial: tutorial.md
+  - Using Your Own Data: custom-data.md
+  # Live demo is generated separately and added to the same Pages site at /demo/.
+  # Use an absolute URL so `mkdocs build --strict` does not treat it as a missing page.
+  - Live Demo ↗: https://biermanr.github.io/StaticPheWeb/demo/
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - toc:
+      permalink: true
