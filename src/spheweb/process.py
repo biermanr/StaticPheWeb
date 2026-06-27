@@ -16,6 +16,11 @@ from jinja2 import Environment, FileSystemLoader
 
 from . import chromosomes, legacy_binning, parsing
 
+# spheweb renders plot files headlessly (CI, servers, machines with no display),
+# so force matplotlib's non-interactive Agg backend instead of the default, which
+# may try to load an interactive backend like Tk (broken on some Windows runners).
+plt.switch_backend("Agg")
+
 
 def bin_gwas_file(
     data_file: Path, chroms: list[chromosomes.Chrom], delim: str = ","
